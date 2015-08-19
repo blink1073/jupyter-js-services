@@ -1,0 +1,11 @@
+language: node_js
+node_js:
+  - '0.12'
+sudo: false
+  - chmod +x ./scripts/travis_after_success.sh
+before_script:
+  # start a virtual screen for Firefox
+  - export DISPLAY=:99.0
+  - sh -e /etc/init.d/xvfb start
+after_success:
+  - ./scripts/travis_after_success.sh
