@@ -47,8 +47,12 @@ export
 function urlPathJoin(...paths: string[]): string {
   var url = '';
   for (var i = 0; i < paths.length; i++) {
-    if (paths[i] === '') {
+    var path = paths[i];
+    if (path === '') {
       continue;
+    }
+    if (i > 0) {
+      path = path.replace(/\/\/+/, '/');
     }
     if (url.length > 0 && url.charAt(url.length - 1) != '/') {
       url = url + '/' + paths[i];
@@ -56,7 +60,7 @@ function urlPathJoin(...paths: string[]): string {
       url = url + paths[i];
     }
   }
-  return url.replace(/\/\/+/, '/');
+  return url
 }
 
 
@@ -81,37 +85,15 @@ function urlJoinEncode(...args: string[]): string {
 
 
 /**
- * Properly detect the current browser.
- * http://stackoverflow.com/questions/2400935/browser-detection-in-javascript
- */
-export
-var browser: string[] = (() => {
-  if (typeof navigator === 'undefined') {
-    // navigator undefined in node
-    return ['None'];
-  }
-  var N: string = navigator.appName;
-  var ua: string = navigator.userAgent
-  var tem: RegExpMatchArray;
-  var M: RegExpMatchArray = ua.match(/(opera|chrome|safari|firefox|msie)\/?\s*(\.?\d+(\.\d+)*)/i);
-  if (M && (tem = ua.match(/version\/([\.\d]+)/i)) !== null) M[2] = tem[1];
-  M = M ? [M[1], M[2]] : [N, navigator.appVersion, '-?'];
-  return M;
-})();
-
-
-/**
  * Return a serialized object string suitable for a query.
  *
  * http://stackoverflow.com/a/30707423
  */
 export
 function jsonToQueryString(json: any): string {
-  return '?' +
-    Object.keys(json).map((key: string): any => {
-      return encodeURIComponent(key) + '=' +
-        encodeURIComponent(json[key]);
-    }).join('&');
+  return '?' + Object.keys(json).map(key =>
+    encodeURIComponent(key) + '=' + encodeURIComponent(json[key])
+  ).join('&');
 }
 
 
@@ -119,7 +101,7 @@ function jsonToQueryString(json: any): string {
  * Input settings for an AJAX request.
  */
 export
-interface IAjaxSetttings {
+interface IAjaxSettings {
   method: string;
   dataType: string;
   contentType?: string;
@@ -155,27 +137,74 @@ interface IAjaxError {
  * http://www.html5rocks.com/en/tutorials/es6/promises/#toc-promisifying-xmlhttprequest
  */
 export
-function ajaxRequest(url: string, settings: IAjaxSetttings): Promise<any> {
+function ajaxRequest(url: string, settings: IAjaxSettings): Promise<any> {
   return new Promise((resolve, reject) => {
     var req = new XMLHttpRequest();
     req.open(settings.method, url);
     if (settings.contentType) {
-      req.overrideMimeType(settings.contentType);
+      req.setRequestHeader('Content-Type', settings.contentType);
     }
     req.onload = () => {
       var response = req.response;
-      if (settings.dataType === 'json') {
+      if (settings.dataType === 'json' && req.response) {
         response = JSON.parse(req.response);
       }
-      resolve({data: response, statusText: req.statusText, xhr: req});
-    }
+      resolve({ data: response, statusText: req.statusText, xhr: req });
+    };
     req.onerror = (err: ErrorEvent) => {
-      reject({xhr: req, statusText: req.statusText, error: err});
-    }
+      reject({ xhr: req, statusText: req.statusText, error: err });
+    };
     if (settings.data) {
       req.send(settings.data);
     } else {
       req.send();
     }
   });
+}
+
+
+/**
+ * A Promise that can be resolved or rejected by another object.
+ */
+export
+class PromiseDelegate<T> {
+
+  /**
+   * Construct a new Promise delegate.
+   */
+  constructor() {
+    this._promise = new Promise<T>((resolve, reject) => {
+      this._resolve = resolve;
+      this._reject = reject;
+    });
+  }
+
+  /**
+   * Get the underlying Promise.
+   */
+  get promise(): Promise<T> {
+    return this._promise;
+  }
+
+  /**
+   * Resolve the underlying Promise with an optional value or another Promise.
+   */
+  resolve(value?: T | Thenable<T>): void {
+    // Note: according to the Promise spec, and the `this` context for resolve 
+    // and reject are ignored
+    this._resolve(value);
+  }
+
+  /**
+   * Reject the underlying Promise with an optional reason.
+   */
+  reject(reason?: any): void {
+    // Note: according to the Promise spec, and the `this` context for resolve 
+    // and reject are ignored
+    this._reject(reason);
+  }
+
+  private _promise: Promise<T>;
+  private _resolve: (value?: T | Thenable<T>) => void;
+  private _reject: (reason?: any) => void;
 }

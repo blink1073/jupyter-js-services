@@ -4,6 +4,8 @@
 
 import expect = require('expect.js');
 
+import encoding = require('text-encoding');
+
 import { MockXMLHttpRequest } from './mockxhr';
 
 
@@ -19,10 +21,16 @@ class RequestHandler {
   constructor() {
     if (typeof window === 'undefined') {
       global.XMLHttpRequest = MockXMLHttpRequest;
+      global.TextEncoder = encoding.TextEncoder;
+      global.TextDecoder = encoding.TextDecoder;
     } else {
       (<any>window).XMLHttpRequest = MockXMLHttpRequest;
     }
     MockXMLHttpRequest.requests = [];
+  }
+
+  set onRequest(cb: () => void) {
+    MockXMLHttpRequest.onRequest = cb;
   }
 
   /**
@@ -41,9 +49,14 @@ class RequestHandler {
  */
 export
 function expectFailure(promise: Promise<any>, done: () => void, message: string): Promise<any> {
-  return promise.then(() => {
+  return promise.then((msg: any) => {
+    console.error('***should not reach this point');
     throw Error('Should not reach this point');
   }).catch((err) => {
+    console.log('****in expect failure', err);
+    if (err.message !== message) {
+      console.error(err.message, ' != ', message);
+    }
     expect(err.message).to.be(message);
     done();
   });
