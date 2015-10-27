@@ -1,7 +1,9 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-import utils = require('./utils');
+import { IAjaxOptions } from './utils';
+
+import * as utils from './utils';
 
 
 /**
@@ -11,59 +13,100 @@ var SERVICE_CONFIG_URL = 'api/config';
 
 
 /**
- * Configurable data section.
+ * A Configurable data section.
  */
-export 
-class ConfigSection {
+export
+interface IConfigSection {
+  /**
+   * The data for this section.
+   *
+   * #### Notes
+   * This is a read-only property.
+   */
+  data: any;
+
+  /**
+   * Modify the stored config values. 
+   *
+   * #### Notes
+   * Updates the local data immediately, sends the change to the server, 
+   * and updates the local data with the response, and fullfils the promise
+   * with that data.
+   */
+  update(newdata: any, ajaxOptions?: IAjaxOptions): Promise<any>;
+
+}
+
+
+/**
+ * Create a config section.
+ * 
+ * @returns A Promise that is fulfilled with the config section is loaded.
+ */
+export
+function getConfigSection(sectionName: string, baseUrl: string, ajaxOptions?: IAjaxOptions): Promise<IConfigSection> {
+  var section = new ConfigSection(sectionName, baseUrl);
+  return section.load(ajaxOptions);
+}
+
+
+/**
+ * Implementation of the Configurable data section.
+ */
+class ConfigSection implements IConfigSection {
 
   /**
    * Create a config section.
    */
   constructor(sectionName: string, baseUrl: string) {
-    this._url = utils.urlJoinEncode(baseUrl, SERVICE_CONFIG_URL, sectionName);
-
-    this._loaded = new Promise<any>((resolve, reject) => {
-      this._finishFirstLoad = resolve;
-    })
+    this._url = utils.urlPathJoin(baseUrl, SERVICE_CONFIG_URL, 
+                                  utils.urlJoinEncode(sectionName));
   }
 
   /**
    * Get the data for this section.
+   *
+   * #### Notes
+   * This is a read-only property.
    */
   get data(): any {
       return this._data;
   }
-
-  /**
-   * Promose fullfilled when the config section is first loaded.
-   */
-  get onLoaded(): Promise<any> {
-    return this._loaded;
-  }
   
   /**
-   * Retrieve the data for this section.
+   * Load the initial data for this section.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/config).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  load(): Promise<any> {
+  load(ajaxOptions?: IAjaxOptions): Promise<IConfigSection> {
     return utils.ajaxRequest(this._url, {
       method: "GET",
       dataType: "json",
-    }).then((success: utils.IAjaxSuccess) => {
+    }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
       this._data = success.data;
-      this._loadDone();
-      return this._data;
+      return this;
     });
   }
   
   /**
-   * Modify the config values stored. Update the local data immediately,
-   * send the change to the server, and use the updated data from the server
-   * when the reply comes.
+   * Modify the stored config values. 
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/config).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   *
+   * Updates the local data immediately, sends the change to the server, 
+   * and updates the local data with the response, and fullfils the promise
+   * with that data.
    */
-  update(newdata: any): Promise<any> {
+  update(newdata: any, ajaxOptions?: IAjaxOptions): Promise<any> {
     this._data = utils.extend(this._data, newdata);
 
     return utils.ajaxRequest(this._url, {
@@ -71,34 +114,18 @@ class ConfigSection {
       data: JSON.stringify(newdata),
       dataType : "json",
       contentType: 'application/json',
-    }).then((success: utils.IAjaxSuccess) => {
+    }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
 
       this._data = success.data;
-      this._loadDone();
       return this._data;
     });
   }
 
-
-  /**
-   * Handle a finished load, fulfilling the onLoaded promise on the first call.
-   */
-  private _loadDone(): void {
-    if (!this._oneLoadFinished) {
-      this._oneLoadFinished = true;
-      this._finishFirstLoad(this._data);
-    }
-  }
-
   private _url = "unknown";
   private _data: any = { };
-  private _loaded: Promise<any> = null;
-  private _oneLoadFinished = false;
-  private _finishFirstLoad: (data: any) => void = null;
-
 }
 
 
@@ -111,35 +138,29 @@ class ConfigWithDefaults {
   /**
    * Create a new config with defaults.
    */
-  constructor(section: ConfigSection, defaults: any, classname?: string) {
+  constructor(section: IConfigSection, defaults: any, classname?: string) {
     this._section = section;
     this._defaults = defaults;
     this._className = classname;
   }
   
   /**
-   * Wait for config to have loaded, then get a value or the default.
+   * Get data from the config section or fall back to defaults.
+   */
+  get(key: string): any {
+    return this._classData()[key] || this._defaults[key]
+  }
+  
+  /**
+   * Set a config value. 
    *
-   * Note: section.load() must be called somewhere else.
-   */
-  get(key: string): Promise<any> {
-    var that = this;
-    return this._section.onLoaded.then(() => {
-      return this._classData()[key] || this._defaults[key]
-    });
-  }
-  
-  /**
-   * Return a config value. If config is not yet loaded, return the default
-   * instead of waiting for it to load.
-   */
-  getSync(key: string): any {
-    return this._classData()[key] || this._defaults[key];
-  }
-  
-  /**
-   * Set a config value. Send the update to the server, and change our
-   * local copy of the data immediately.
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/config).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   *
+   * Sends the update to the server, and changes our local copy of the data 
+   * immediately.
    */
   set(key: string, value: any): Promise<any> {
      var d: any = {};
@@ -155,6 +176,8 @@ class ConfigWithDefaults {
 
   /**
    * Get data from the Section with our classname, if available.
+   *
+   * #### Notes
    * If we have no classname, get all of the data in the Section
    */
   private _classData(): any {
@@ -165,7 +188,7 @@ class ConfigWithDefaults {
     }
   }
 
-  private _section: ConfigSection = null;
+  private _section: IConfigSection = null;
   private _defaults: any = null;
   private _className = "unknown";
 }

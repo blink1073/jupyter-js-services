@@ -20,7 +20,7 @@ import { PromiseDelegate, uuid } from '../../lib/utils';
 
 import { MockSocket, MockSocketServer, overrideWebSocket } from './mocksocket';
 
-import { RequestHandler, expectFailure, doLater } from './utils';
+import { RequestHandler, ajaxOptions, expectFailure, doLater } from './utils';
 
 
 // Abnormal websocket close.
@@ -165,6 +165,21 @@ describe('jupyter.services - kernel', () => {
       });
     });
 
+    it('should accept ajax options', (done) => {
+      var handler = new RequestHandler();
+      var list = listRunningKernels('http://localhost:8888', ajaxOptions);
+      var data = [
+        { id: uuid(), name: "test" },
+        { id: uuid(), name: "test2" }
+      ];
+      handler.respond(200, data);
+      return list.then((response: IKernelId[]) => {
+        expect(response[0]).to.eql(data[0]);
+        expect(response[1]).to.eql(data[1]);
+        done();
+      });
+    });
+
     it('should throw an error for an invalid model', (done) => {
       var handler = new RequestHandler();
       var list = listRunningKernels('http://localhost:8888');
@@ -194,6 +209,16 @@ describe('jupyter.services - kernel', () => {
     it('should create an IKernel object', (done) => {
       var tester = new KernelTester();
       var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+      tester.respond(201, { id: uuid(), name: KERNEL_OPTIONS.name });
+      kernelPromise.then((kernel: IKernel) => {
+        expect(kernel.status).to.be(KernelStatus.Starting);
+        done();
+      });
+    });
+
+    it('should accept ajax options', (done) => {
+      var tester = new KernelTester();
+      var kernelPromise = startNewKernel(KERNEL_OPTIONS, ajaxOptions);
       tester.respond(201, { id: uuid(), name: KERNEL_OPTIONS.name });
       kernelPromise.then((kernel: IKernel) => {
         expect(kernel.status).to.be(KernelStatus.Starting);
@@ -240,6 +265,20 @@ describe('jupyter.services - kernel', () => {
       return expectFailure(kernelPromise, done, "");
     });
 
+    it('should auto-reconnect on websocket error', (done) => {
+      var tester = new KernelTester();
+      var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+      tester.respond(201, { id: uuid(), name: KERNEL_OPTIONS.name });
+      kernelPromise.then((kernel: IKernel) => {
+        expect(kernel.status).to.be(KernelStatus.Starting);
+        kernel.statusChanged.connect(() => {
+          if (kernel.status === KernelStatus.Starting) {
+            done();
+          }
+        });
+        tester.triggerError('Error event');
+      });
+    });
   });
 
   describe('connectToKernel()', () => {
@@ -269,6 +308,19 @@ describe('jupyter.services - kernel', () => {
         done();
       });
     });
+
+    it('should accept ajax options', (done) => {
+      var tester = new KernelTester();
+      var id = uuid();
+      var kernelPromise = connectToKernel(id, KERNEL_OPTIONS, ajaxOptions);
+      tester.respond(200, [{ id: id, name: KERNEL_OPTIONS.name }]);
+      kernelPromise.then((kernel: IKernel) => {
+        expect(kernel.name).to.be(KERNEL_OPTIONS.name);
+        expect(kernel.id).to.be(id);
+        done();
+      });
+    });
+
 
     it('should fail if no existing kernel and no options', (done) => {
       var tester = new KernelTester();
@@ -396,6 +448,20 @@ describe('jupyter.services - kernel', () => {
         });
       });
 
+      it('should get a reconnecting status', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        tester.respond(201, { id: uuid(), name: KERNEL_OPTIONS.name });
+        kernelPromise.then((kernel: IKernel) => {
+          expect(kernel.status).to.be(KernelStatus.Starting);
+          kernel.statusChanged.connect(() => {
+            expect(kernel.status).to.be(KernelStatus.Reconnecting);
+            done();
+          });
+          tester.triggerError('Error event');
+        });
+      });
+
       it('should get a dead status', (done) => {
         var tester = new KernelTester();
         var kernelPromise = startNewKernel(KERNEL_OPTIONS);
@@ -406,7 +472,7 @@ describe('jupyter.services - kernel', () => {
             expect(kernel.status).to.be(KernelStatus.Dead);
             done();
           });
-          tester.triggerError('Error event');
+          tester.sendStatus('dead');
         });
       });
 
@@ -426,6 +492,42 @@ describe('jupyter.services - kernel', () => {
       });
     });
 
+    context('#isDisposed', () => {
+
+      it('should be true after we dispose of the kernel', () => {
+        createKernel().then((kernel: IKernel) => {
+          expect(kernel.isDisposed).to.be(false);
+          kernel.dispose();
+          expect(kernel.isDisposed).to.be(true);
+        });
+      });
+
+      it('should be safe to call multiple times', () => {
+        createKernel().then((kernel: IKernel) => {
+          expect(kernel.isDisposed).to.be(false);
+          expect(kernel.isDisposed).to.be(false);
+          kernel.dispose();
+          expect(kernel.isDisposed).to.be(true);
+          expect(kernel.isDisposed).to.be(true);
+        });
+      });
+    });
+
+    context('#dispose()', () => {
+
+      it('should dispose of the resources held by the kernel', () => {
+        createKernel().then((kernel: IKernel) => {
+          var future = kernel.execute({ code: 'foo' });
+          var comm = kernel.connectToComm('foo');
+          expect(future.isDisposed).to.be(false);
+          expect(comm.isDisposed).to.be(false);
+          kernel.dispose();
+          expect(future.isDisposed).to.be(true);
+          expect(comm.isDisposed).to.be(true);
+        });
+      });
+    });
+
     context('#sendShellMessage()', () => {
 
       it('should send a message to the kernel', (done) => {
@@ -440,7 +542,7 @@ describe('jupyter.services - kernel', () => {
             session: kernel.clientId
           }
           var msg = createKernelMessage(options);
-          var future = kernel.sendShellMessage(msg);
+          var future = kernel.sendShellMessage(msg, true);
           tester.onMessage((msg) => {
             expect(msg.header.msg_type).to.be('custom');
             done();
@@ -462,7 +564,7 @@ describe('jupyter.services - kernel', () => {
           var encoder = new TextEncoder('utf8');
           var data = encoder.encode('hello');
           var msg = createKernelMessage(options, {}, {}, [data, data.buffer]);
-          var future = kernel.sendShellMessage(msg);
+          var future = kernel.sendShellMessage(msg, true);
 
           tester.onMessage((msg: any) => {
             var decoder = new TextDecoder('utf8');
@@ -488,10 +590,10 @@ describe('jupyter.services - kernel', () => {
           tester.sendStatus('dead');
           kernel.statusChanged.connect(() => {
             try {
-              kernel.sendShellMessage(msg);
+              kernel.sendShellMessage(msg, true);
             } catch(err) {
               expect(err.message).to.be(
-                'Cannot send a message to a closed Kernel'
+                'Kernel is not ready to send a message'
               );
               done();
             }
@@ -511,7 +613,7 @@ describe('jupyter.services - kernel', () => {
             session: kernel.clientId
           }
           var msg = createKernelMessage(options);
-          var future = kernel.sendShellMessage(msg);
+          var future = kernel.sendShellMessage(msg, true);
           tester.onMessage((msg) => {
             // trigger onDone
             msg.channel = 'iopub';
@@ -542,6 +644,18 @@ describe('jupyter.services - kernel', () => {
         tester.respond(201, data);
         kernelPromise.then((kernel: IKernel) => {
           var interrupt = kernel.interrupt();
+          tester.respond(204, data);
+          interrupt.then(() => { done(); });
+        });
+      });
+
+      it('should accept ajax options', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
+        kernelPromise.then((kernel: IKernel) => {
+          var interrupt = kernel.interrupt(ajaxOptions);
           tester.respond(204, data);
           interrupt.then(() => { done(); });
         });
@@ -600,6 +714,19 @@ describe('jupyter.services - kernel', () => {
         });
       });
 
+      it('should accept ajax options', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
+        kernelPromise.then((kernel: IKernel) => {
+          var restart = kernel.restart(ajaxOptions);
+          tester.respond(200, data);
+          tester.sendStatus('starting');
+          restart.then(() => { done(); });
+        });
+      });
+
       it('should fail if the kernel does not restart', (done) => {
         var tester = new KernelTester();
         var kernelPromise = startNewKernel(KERNEL_OPTIONS);
@@ -607,9 +734,8 @@ describe('jupyter.services - kernel', () => {
         tester.respond(201, data);
         kernelPromise.then((kernel: IKernel) => {
           var restart = kernel.restart();
-          tester.respond(200, data);
-          tester.sendStatus('dead');
-          expectFailure(restart, done, 'Kernel is dead');
+          tester.respond(500, {});
+          expectFailure(restart, done, '');
         });
       });
 
@@ -649,18 +775,21 @@ describe('jupyter.services - kernel', () => {
         });
       });
 
-      it('should fail if the kernel is dead', (done) => {
+      it('should dispose of existing comm and future objects', (done) => {
         var tester = new KernelTester();
         var kernelPromise = startNewKernel(KERNEL_OPTIONS);
         var data = { id: uuid(), name: KERNEL_OPTIONS.name };
         tester.respond(201, data);
         kernelPromise.then((kernel: IKernel) => {
-          tester.sendStatus('dead');
-          kernel.statusChanged.connect(() => {
-            expectFailure(kernel.restart(), done, 'Kernel is dead');
-          });
+          var comm = kernel.connectToComm('test');
+          var future = kernel.execute({ code: 'foo' });
+          var restart = kernel.restart();
+          expect(comm.isDisposed).to.be(true);
+          expect(future.isDisposed).to.be(true);
+          done();
         });
       });
+
     });
 
     context('#shutdown()', () => {
@@ -672,6 +801,18 @@ describe('jupyter.services - kernel', () => {
         tester.respond(201, data);
         kernelPromise.then((kernel: IKernel) => {
           var shutdown = kernel.shutdown();
+          tester.respond(204, data);
+          shutdown.then(() => { done(); });
+        });
+      });
+
+      it('should accept ajax options', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
+        kernelPromise.then((kernel: IKernel) => {
+          var shutdown = kernel.shutdown(ajaxOptions);
           tester.respond(204, data);
           shutdown.then(() => { done(); });
         });
@@ -750,6 +891,27 @@ describe('jupyter.services - kernel', () => {
           promise.then(() => { done(); });
         });
       });
+
+      it('should reject the promise if the kernel is dead', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
+        kernelPromise.then((kernel: IKernel) => {
+          var options: ICompleteRequest = {
+            code: 'hello',
+            cursor_pos: 4
+          }
+          tester.sendStatus('dead');
+          kernel.statusChanged.connect(() => {
+            if (kernel.status === KernelStatus.Dead) {
+              var promise = kernel.complete(options);
+              expectFailure(promise, done, 
+                            'Kernel is not ready to send a message');
+            }
+          });
+        });
+      });
     });
 
     context('#inspect()', () => {
@@ -772,6 +934,28 @@ describe('jupyter.services - kernel', () => {
             tester.send(msg);
           });
           promise.then(() => { done(); });
+        });
+      });
+
+      it('should reject the promise if the kernel is reconnecting', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
+        kernelPromise.then((kernel: IKernel) => {
+          var options: IInspectRequest = {
+            code: 'hello',
+            cursor_pos: 4,
+            detail_level: 0
+          }
+          tester.triggerError('foo');
+          kernel.statusChanged.connect(() => {
+            if (kernel.status === KernelStatus.Reconnecting) {
+              var promise = kernel.inspect(options);
+              expectFailure(promise, done,
+                            'Kernel is not ready to send a message');
+            }
+          });
         });
       });
     });
@@ -826,7 +1010,7 @@ describe('jupyter.services - kernel', () => {
               kernel.sendInputReply({ value: 'test' });
             } catch(err) {
               expect(err.message).to.be(
-                'Cannot send a message to a closed Kernel'
+                'Kernel is not ready to send a message'
               );
               done();
             }
@@ -837,7 +1021,7 @@ describe('jupyter.services - kernel', () => {
 
     context('#execute()', () => {
 
-      it('should send handle incoming messages', (done) => {
+      it('should send and handle incoming messages', (done) => {
         var tester = new KernelTester();
         var kernelPromise = startNewKernel(KERNEL_OPTIONS);
         var data = { id: uuid(), name: KERNEL_OPTIONS.name };
@@ -853,14 +1037,12 @@ describe('jupyter.services - kernel', () => {
             stop_on_error: false
           }
           var future = kernel.execute(options);
-          expect(future.autoDispose).to.be(true);
           expect(future.onDone).to.be(null);
           expect(future.onStdin).to.be(null);
           expect(future.onReply).to.be(null);
           expect(future.onIOPub).to.be(null);
 
           tester.onMessage((msg) => {
-
             expect(msg.channel).to.be('shell');
 
             // send a reply
@@ -901,50 +1083,66 @@ describe('jupyter.services - kernel', () => {
           });
         });
       });
-    });
 
-    it('should not auto-dispose', (done) => {
-      var tester = new KernelTester();
-      var kernelPromise = startNewKernel(KERNEL_OPTIONS);
-      var data = { id: uuid(), name: KERNEL_OPTIONS.name };
-      tester.respond(201, data);
+      it('should not dispose of KernelFuture when disposeOnDone=false', (done) => {
+        var tester = new KernelTester();
+        var kernelPromise = startNewKernel(KERNEL_OPTIONS);
+        var data = { id: uuid(), name: KERNEL_OPTIONS.name };
+        tester.respond(201, data);
 
-      kernelPromise.then((kernel) => {
-        var options: IExecuteRequest = {
-          code: 'test',
-          silent: false,
-          store_history: true,
-          user_expressions: {},
-          allow_stdin: false,
-          stop_on_error: false
-        }
-        var future = kernel.execute(options);
-        future.autoDispose = false;
-        expect(future.autoDispose).to.be(false);
+        kernelPromise.then((kernel) => {
+          var options: IExecuteRequest = {
+            code: 'test',
+            silent: false,
+            store_history: true,
+            user_expressions: {},
+            allow_stdin: false,
+            stop_on_error: false
+          }
+          var future = kernel.execute(options, false);
+          expect(future.onDone).to.be(null);
+          expect(future.onStdin).to.be(null);
+          expect(future.onReply).to.be(null);
+          expect(future.onIOPub).to.be(null);
 
-        tester.onMessage((msg) => {
+          tester.onMessage((msg) => {
+            expect(msg.channel).to.be('shell');
 
-          expect(msg.channel).to.be('shell');
-
-          // send a reply
-          msg.parent_header = msg.header;
-          msg.channel = 'shell';
-          tester.send(msg);
-
-          future.onReply = () => {
-            // trigger onDone
-            msg.channel = 'iopub';
-            msg.header.msg_type = 'status';
-            msg.content.execution_state = 'idle';
+            // send a reply
+            msg.parent_header = msg.header;
+            msg.channel = 'shell';
             tester.send(msg);
-          }
 
-          future.onDone = () => {
-            doLater(() => {
-              expect(future.isDisposed).to.be(false);
-              done();
-            });
-          }
+            future.onReply = () => {
+              // trigger onIOPub with a 'stream' message
+              msg.channel = 'iopub';
+              msg.header.msg_type = 'stream';
+              tester.send(msg);
+            }
+
+            future.onIOPub = () => { 
+              if (msg.header.msg_type === 'stream') {
+                // trigger onDone
+                msg.channel = 'iopub';
+                msg.header.msg_type = 'status';
+                msg.content.execution_state = 'idle';
+                tester.send(msg);
+              }
+            }
+
+            future.onDone = () => {
+              doLater(() => {
+                expect(future.isDisposed).to.be(false);
+                expect(future.onDone).to.be(null);
+                expect(future.onIOPub).to.not.be(null);
+                future.dispose();
+                expect(future.onIOPub).to.be(null);
+                expect(future.isDisposed).to.be(true);
+                done();
+              });
+            }
+
+          });
         });
       });
 
@@ -957,8 +1155,9 @@ describe('jupyter.services - kernel', () => {
 /**
  * Convenience function to start a kernel fully.
  */
-function createKernel(): Promise<IKernel> {
-  var tester = new KernelTester();
+export
+function createKernel(tester?: KernelTester): Promise<IKernel> {
+  var tester = tester || new KernelTester();
   var kernelPromise = startNewKernel(KERNEL_OPTIONS);
   tester.respond(201, { id: uuid(), name: KERNEL_OPTIONS.name });
   return kernelPromise;

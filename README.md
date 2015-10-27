@@ -7,6 +7,9 @@ Javascript client for the Jupyter services REST APIs
 
 [REST API Docs](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml)
 
+Note: All functions and methods using the REST API allow an optional 
+`ajaxOptions` parameter to configure the request.
+
 
 Package Install
 ---------------
@@ -24,12 +27,13 @@ Source Build
 
 **Prerequisites**
 - [git](http://git-scm.com/)
-- [node](http://nodejs.org/)
+- [node 0.12+](http://nodejs.org/)
 
 ```bash
 git clone https://github.com/jupyter/jupyter-js-services.git
 cd jupyter-js-services
 npm install
+npm run build
 ```
 
 **Rebuild**
@@ -67,9 +71,41 @@ Supported Runtimes
 The runtime versions which are currently *known to work* are listed below.
 Earlier versions may also work, but come with no guarantees.
 
+- Node 0.12.7+
 - IE 11+
 - Firefox 32+
 - Chrome 38+
+
+
+Bundle for the Browser
+----------------------
+
+Follow the package install instructions first.
+
+```bash
+npm install --save-dev browserify
+browserify myapp.js -o mybundle.js
+```
+
+
+Usage from Node.js
+------------------
+
+Follow the package install instructions first.
+
+```bash
+npm install --save xmlhttprequest ws
+```
+
+Override the global `XMLHttpRequest` and `WebSocket`:
+
+```typescript
+import { XMLHttpRequest } from "xmlhttprequest";
+import { default as WebSocket } from 'ws';
+
+global.XMLHttpRequest = XMLHttpRequest;
+global.WebSocket = WebSocket;
+```
 
 
 Usage Examples
@@ -199,6 +235,62 @@ startNewSession(options).then((session) => {
 });
 ```
 
+**Comm**
+
+```typescript
+import {
+  getKernelSpecs, startNewKernel
+} from 'jupyter-js-services';
+
+var BASEURL = 'http://localhost:8888';
+var WSURL = 'ws://localhost:8888';
+
+// Create a comm from the server side.
+//
+// get info about the available kernels and connect to one
+getKernelSpecs(BASEURL).then(kernelSpecs => {
+  return startNewKernel({
+    baseUrl: BASEURL,
+    wsUrl: WSURL,
+    name: kernelSpecs.default,
+  });
+}).then(kernel => {
+  var comm = kernel.connectToComm('test');
+  comm.open('initial state');
+  comm.send('test');
+  comm.close('bye');
+});
+
+// Create a comm from the client side.
+getKernelSpecs(BASEURL).then(kernelSpecs => {
+  return startNewKernel({
+    baseUrl: BASEURL,
+    wsUrl: WSURL,
+    name: kernelSpecs.default,
+  });
+}).then(kernel => {
+  kernel.commOpened.connect((kernel, commMsg) => {
+    if (commMsg.target_name !== 'test2') {
+       return;
+    }
+    var comm = kernel.connectToComm('test2', commMsg.comm_id);
+    comm.onMsg = (msg) => {
+      console.log(msg);  // 'hello'
+    }
+    comm.onClose = (msg) => {
+      console.log(msg);  // 'bye'
+    }
+  });
+  var code = [
+    "from ipykernel.comm import Comm",
+    "comm = Comm(target_name='test2')",
+    "comm.send(data='hello')",
+    "comm.close(data='bye')"
+  ].join('\n')
+  kernel.execute({ code: code });
+});
+```
+
 **Contents**
 
 ```typescript
@@ -256,33 +348,26 @@ contents.listCheckpoints("/foo/bar.txt").then((models) => {
 **Configuration**
 
 ```typescript
-import {
-  ConfigSection, ConfigWithDefaults
+  startNewKernel, getKernelSpecs, getConfigSection, ConfigWithDefaults
 } from 'jupyter-js-services';
 
-var section = new ConfigSection('mySection', 'http://localhost:8000');
+var BASEURL = 'http://localhost:8888';
+var WSURL = 'ws://localhost:8888';
 
-// load from the server
-section.load().then((data: any) => {
-    console.log(data);
+getKernelSpecs(BASEURL).then(kernelSpecs => {
+  return startNewKernel({
+    baseUrl: BASEURL,
+    wsUrl: WSURL,
+    name: kernelSpecs.default,
+  });
+}).then(kernel => {
+  getConfigSection('notebook', BASEURL).then(section => {
+    var defaults = { default_cell_type: 'code' };
+    var config = new ConfigWithDefaults(section, defaults, 'Notebook');
+    console.log(config.get('default_cell_type'));   // 'code'
+    config.set('foo', 'bar').then(data => {
+       console.log(data.foo); // 'bar'
+    });
+  });
 });
-
-// update contents
-section.update({ mySubSection: { 'fizz': 'buzz', spam: 'eggs' } });
-
-console.log(section.data.mySubSection.fizz);  // 'buzz'
-
-// create a config object based on our section with default values and a
-// class of data
-var config = new ConfigWithDefaults(section, { bar: 'baz' }, 'mySubSection');
-
-// get the current value of fizz regardless of whether the section is loaded
-config.getSync('bar');  // defaults to 'baz' if section is not loaded
-
-// wait for the section to load and get our data
-console.log(config.get('bar'));
-
-// set a config value
-config.set('fizz', 'bazz');  // sets section.data.mySubSection.fizz = 'bazz'
-
 ```

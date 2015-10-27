@@ -6,7 +6,7 @@
 /**
  * Copy the contents of one object to another, recursively.
  *
- * http://stackoverflow.com/questions/12317003/something-like-jquery-extend-but-standalone
+ * From [stackoverflow](http://stackoverflow.com/a/12317051).
  */
 export
 function extend(target: any, source: any): any {
@@ -23,25 +23,22 @@ function extend(target: any, source: any): any {
 
 
 /**
- * Get a uuid as a string.
- *
- * http://www.ietf.org/rfc/rfc4122.txt
+ * Get a random 128b hex string (not a formal UUID)
  */
 export
 function uuid(): string {
   var s: string[] = [];
-  var hexDigits = "0123456789ABCDEF";
+  var hexDigits = "0123456789abcdef";
+  var nChars = hexDigits.length;
   for (var i = 0; i < 32; i++) {
-    s[i] = hexDigits.charAt(Math.floor(Math.random() * 0x10));
+    s[i] = hexDigits.charAt(Math.floor(Math.random() * nChars));
   }
-  s[12] = "4";  // bits 12-15 of the time_hi_and_version field to 0010
-  s[16] = hexDigits.charAt((Number(s[16]) & 0x3) | 0x8);  // bits 6-7 of the clock_seq_hi_and_reserved to 01
   return s.join("");
 }
 
 
 /**
- * Join a sequence of url components with '/'.
+ * Join a sequence of url components with `'/'`.
  */
 export
 function urlPathJoin(...paths: string[]): string {
@@ -65,8 +62,9 @@ function urlPathJoin(...paths: string[]): string {
 
 
 /**
- * Encode just the components of a multi-segment uri,
- * leaving '/' separators.
+ * Encode just the components of a multi-segment uri.  
+ *
+ * Preserves the `'/'` separators.
  */
 export
 function encodeURIComponents(uri: string): string {
@@ -75,8 +73,7 @@ function encodeURIComponents(uri: string): string {
 
 
 /**
- * Join a sequence of url components with '/',
- * encoding each component with encodeURIComponent.
+ * Encode and join a sequence of url components with `'/'`.
  */
 export
 function urlJoinEncode(...args: string[]): string {
@@ -87,7 +84,7 @@ function urlJoinEncode(...args: string[]): string {
 /**
  * Return a serialized object string suitable for a query.
  *
- * http://stackoverflow.com/a/30707423
+ * From [stackoverflow](http://stackoverflow.com/a/30707423).
  */
 export
 function jsonToQueryString(json: any): string {
@@ -106,6 +103,20 @@ interface IAjaxSettings {
   dataType: string;
   contentType?: string;
   data?: any;
+}
+
+
+/**
+ * Options for AJAX calls.
+ */
+export
+interface IAjaxOptions {
+  timeout?: number;
+  requestHeaders?: { [key: string]: string; };
+  async?: boolean;
+  withCredentials?: boolean;
+  user?: string;
+  password?: string;
 }
 
 
@@ -134,26 +145,41 @@ interface IAjaxError {
 /**
  * Asynchronous XMLHTTPRequest handler.
  *
- * http://www.html5rocks.com/en/tutorials/es6/promises/#toc-promisifying-xmlhttprequest
+ * Based on this [example](http://www.html5rocks.com/en/tutorials/es6/promises/#toc-promisifying-xmlhttprequest).
  */
 export
-function ajaxRequest(url: string, settings: IAjaxSettings): Promise<any> {
+function ajaxRequest(url: string, settings: IAjaxSettings, options?: IAjaxOptions): Promise<any> {
+  options = options || {};
   return new Promise((resolve, reject) => {
     var req = new XMLHttpRequest();
-    req.open(settings.method, url);
+    req.open(settings.method, url, options.async, options.user,
+             options.password);
     if (settings.contentType) {
       req.setRequestHeader('Content-Type', settings.contentType);
     }
+    if (options.timeout !== void 0) req.timeout = options.timeout;
+    if (options.withCredentials !== void 0) {
+      req.withCredentials = options.withCredentials;
+    }
+    if (options.requestHeaders !== void 0) {
+       for (var prop in options.requestHeaders) {
+         req.setRequestHeader(prop, (options as any).requestHeaders[prop]);
+       }
+    }
     req.onload = () => {
-      var response = req.response;
-      if (settings.dataType === 'json' && req.response) {
-        response = JSON.parse(req.response);
+      var response = req.responseText;
+      if (settings.dataType === 'json' && response) {
+        response = JSON.parse(response);
       }
       resolve({ data: response, statusText: req.statusText, xhr: req });
     };
     req.onerror = (err: ErrorEvent) => {
       reject({ xhr: req, statusText: req.statusText, error: err });
     };
+    req.ontimeout = () => {
+      reject({ xhr: req, statusText: req.statusText,
+               error: new Error('Operation Timed Out') });
+    }
     if (settings.data) {
       req.send(settings.data);
     } else {

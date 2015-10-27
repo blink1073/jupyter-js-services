@@ -1,12 +1,12 @@
 {
-  "name": "jupyter-services",
+  "name": "jupyter-js-services",
   "version": "0.0.1",
   "description": "Client APIs for the Jupyter services REST APIs",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "dependencies": {
-    "phosphor-disposable": "^1.0.2",
-    "phosphor-signaling": "^1.1.0"
+    "phosphor-disposable": "^1.0.4",
+    "phosphor-signaling": "^1.1.2"
   },
   "devDependencies": {
     "expect.js": "^0.3.1",
@@ -19,10 +19,11 @@
     "karma-mocha": "^0.2.0",
     "karma-mocha-reporter": "^1.1.1",
     "mocha": "^2.2.5",
+    "requirejs": "^2.1.20",
     "rimraf": "^2.4.2",
     "text-encoding": "^0.5.2",
-    "typedoc": "git://github.com/phosphorjs/typedoc.git",
-    "typescript": "1.6.0-beta"
+    "typedoc": "^0.3.11",
+    "typescript": "^1.6.2"
   },
   "scripts": {
     "clean": "rimraf docs && rimraf lib && rimraf test/build",
@@ -33,6 +34,7 @@
     "postinstall": "npm dedupe",
     "prepublish": "npm run build",
     "test": "mocha test/build/test*.js",
+    "test:debug": "pkill node; node-debug _mocha test/build/test*.js",
     "test:integration": "cd test && python run_test.py",
     "test:coverage": "istanbul cover _mocha -- test/build/test*.js"
   },
@@ -46,8 +48,8 @@
     "notebook"
   ],
   "files": [
-    "lib/index.js",
-    "lib/index.d.ts"
+    "lib/*.js",
+    "lib/*.d.ts"
   ],
   "author": "Project Jupyter",
   "license": "BSD-3-Clause",

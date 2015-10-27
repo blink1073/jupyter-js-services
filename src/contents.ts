@@ -1,7 +1,11 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
+import { IAjaxOptions } from './utils';
+
 import * as utils from './utils';
+
+import * as validate from './validate';
 
 
 /**
@@ -15,28 +19,116 @@ var SERVICE_CONTENTS_URL = 'api/contents';
  */
 export
 interface IContentsOpts {
+  /**
+   * The type of file. 
+   *
+   * #### Notes
+   * One of `{ "directory", "file", "notebook" }`
+   */
   type?: string;
+
+  /**
+   * The format of the file `content`.
+   *
+   * #### Notes
+   * One of `{ 'json', text', 'base64' }`
+   *
+   * Only relevant for type: 'file'
+   */
   format?: string;
-  content?: any;
+
+  /**
+   * The file contents, or whether to include the file contents.
+   *
+   * #### Notes
+   * Can either contain the contents of a file for upload, or a boolean
+   * indicating whether to include contents in the response.
+   */
+  content?: string | boolean;
+
+  /**
+   * The file extension, including a leading `.`. 
+   */
   ext?: string;
+
+  /**
+   * The name of the file.
+   */
   name?: string;
 }
 
 
 /**
  * Contents model.
+ *
+ * #### Notes
+ * If the model does not contain content, the `content`, `format`, and 
+ * `mimetype` keys will be `null`. 
  */
 export 
 interface IContentsModel {
+
+  /**
+   * Name of the contents file.
+   *
+   * #### Notes
+   *  Equivalent to the last part of the `path` field.
+   */
   name: string;
+
+  /**
+   * The full file path. 
+   *
+   * #### Notes
+   * It will *not* start with `/`, and it will be `/`-delimited.
+   */
   path: string;
+
+  /**
+   * The type of file. 
+   *
+   * #### Notes
+   * One of `{ "directory", "file", "notebook" }`
+   */
   type: string;
-  writable?: boolean;
+
+  /**
+   * Whether the requester has permission to edit the file they have requested.
+   */
+  writable: boolean;
+
+  /**
+   * File creation timestamp.
+   */
   created: string;
+
+  /**
+   * Last modified timestamp.
+   */
   last_modified: string;
-  mimetype: string;
-  content: string;
-  format: string;
+
+  /**
+   * Specify the mime-type of file contents.
+   *
+   * #### Notes
+   * Only non-`null` when `content` is present and `type` is `"file"`.
+   */
+  mimetype?: string;
+
+  /**
+   * The file content. 
+   */
+  content?: string;
+
+  /**
+   * The format of the file `content`.
+   *
+   * #### Notes
+   * One of `{ 'json', text', 'base64' }`
+   *
+   * Only relevant for type: 'file'
+   */
+  format?: string;
 }
 
 
@@ -45,7 +137,14 @@ interface IContentsModel {
  */
 export 
 interface ICheckpointModel {
+  /**
+   * The unique identifier for the checkpoint. 
+   */
   id: string;
+
+  /**
+   * Last modified timestamp.
+   */
   last_modified: string;
 }
 
@@ -55,22 +154,133 @@ interface ICheckpointModel {
  **/
 export 
 interface IContents {
-  get(path: string, type: string, options: IContentsOpts): Promise<IContentsModel>;
-  newUntitled(path: string, options: IContentsOpts): Promise<IContentsModel>;
-  delete(path: string): Promise<void>;
-  rename(path: string, newPath: string): Promise<IContentsModel>;
-  save(path: string, model: any): Promise<IContentsModel>;
-  listContents(path: string): Promise<IContentsModel>;
-  copy(path: string, toDir: string): Promise<IContentsModel>;
-  createCheckpoint(path: string): Promise<ICheckpointModel>;
-  restoreCheckpoint(path: string, checkpointID: string): Promise<void>;
-  deleteCheckpoint(path: string, checkpointID: string): Promise<void>
-  listCheckpoints(path: string): Promise<ICheckpointModel[]>;
+  /**
+   * Get a file or directory.
+   *
+   * @param path: Path to the file or directory. 
+   * @param options: Use `options.content = true` to return file contents.
+
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  get(path: string, type: string, options: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /**
+   * Create a new untitled file or directory in the specified directory path.
+   *
+   * @param path: The directory in which to create the new file/directory.
+   * @param options: Use `ext` and `type` options to choose the type of file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  newUntitled(path: string, options: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /**
+   * Delete a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  delete(path: string, ajaxOptions?: IAjaxOptions): Promise<void>;
+
+  /**
+   * Rename a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  rename(path: string, newPath: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /**
+   * Save a file.
+   *
+   * #### Notes
+   * Ensure that `model.content` is populated for the file.
+   *
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  save(path: string, model: any, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /**
+   * Copy a file into a given directory.
+   *
+   * #### Notes
+   * The server will select the name of the copied file.
+   *
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  copy(path: string, toDir: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /** 
+   * List notebooks and directories at a given path.
+   *
+   * @param: path: The path to list notebooks in.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  listContents(path: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+
+  /**
+   * Create a checkpoint for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  createCheckpoint(path: string, ajaxOptions?: IAjaxOptions): Promise<ICheckpointModel>;
+
+  /** 
+   * List available checkpoints for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  listCheckpoints(path: string, ajaxOptions?: IAjaxOptions): Promise<ICheckpointModel[]>;
+
+  /**
+   * Restore a file to a known checkpoint state.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  restoreCheckpoint(path: string, checkpointID: string, ajaxOptions?: IAjaxOptions): Promise<void>;
+
+  /**
+   * Delete a checkpoint for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  deleteCheckpoint(path: string, checkpointID: string, ajaxOptions?: IAjaxOptions): Promise<void>;
 }
 
 
 /**
  * A contents handle passing file operations to the back-end.  
+ *
  * This includes checkpointing with the normal file operations.
  */
 export 
@@ -80,13 +290,21 @@ class Contents implements IContents {
    * Create a new contents object.
    */
   constructor(baseUrl: string) {
-    this._apiUrl = utils.urlJoinEncode(baseUrl, SERVICE_CONTENTS_URL);
+    this._apiUrl = utils.urlPathJoin(baseUrl, SERVICE_CONTENTS_URL);
   }
 
   /**
    * Get a file or directory.
+   *
+   * @param path: Path to the file or directory. 
+   * @param options: Use `options.content = true` to return file contents.
+
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  get(path: string, options: IContentsOpts): Promise<IContentsModel> {
+  get(path: string, options: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
     var settings = {
       method : "GET",
       dataType : "json",
@@ -97,19 +315,27 @@ class Contents implements IContents {
     if (options.format) { params.format = options.format; }
     if (options.content === false) { params.content = '0'; }
     url = url + utils.jsonToQueryString(params);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): IContentsModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): IContentsModel => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateContentsModel(success.data);
+      validate.validateContentsModel(success.data);
       return success.data;
     });
   }
 
   /**
    * Create a new untitled file or directory in the specified directory path.
+   *
+   * @param path: The directory in which to create the new file/directory.
+   * @param options: Use `ext` and `type` options to choose the type of file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  newUntitled(path: string, options?: IContentsOpts): Promise<IContentsModel> {
+  newUntitled(path: string, options?: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
     var settings: utils.IAjaxSettings = {
         method : "POST",
         dataType : "json",
@@ -123,25 +349,30 @@ class Contents implements IContents {
       settings.contentType = 'application/json';
     }
     var url = this._getUrl(path);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): IContentsModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): IContentsModel => {
       if (success.xhr.status !== 201) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateContentsModel(success.data);
+      validate.validateContentsModel(success.data);
       return success.data;
     });
   }
 
   /**
    * Delete a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  delete(path: string): Promise<void> {
+  delete(path: string, ajaxOptions?: IAjaxOptions): Promise<void> {
     var settings = {
       method : "DELETE",
       dataType : "json",
     };
     var url = this._getUrl(path);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): void => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): void => {
       if (success.xhr.status !== 204) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
@@ -152,15 +383,20 @@ class Contents implements IContents {
         if (error.xhr.status === 400) {
           throw new Error('Directory not found');
         }
-        throw error;
+        throw new Error(error.xhr.statusText);
       }
     );
   }
 
   /**
    * Rename a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  rename(path: string, newPath: string): Promise<IContentsModel> {
+  rename(path: string, newPath: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
     var data = {path: newPath};
     var settings = {
       method : "PATCH",
@@ -169,19 +405,26 @@ class Contents implements IContents {
       contentType: 'application/json',
     };
     var url = this._getUrl(path);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): IContentsModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): IContentsModel => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateContentsModel(success.data);
+      validate.validateContentsModel(success.data);
       return success.data;
     });
   }
 
   /**
    * Save a file.
+   *
+   * #### Notes
+   * Ensure that `model.content` is populated for the file.
+   *
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  save(path: string, model: IContentsOpts): Promise<IContentsModel> {
+  save(path: string, model: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
     var settings = {
       method : "PUT",
       dataType: "json",
@@ -189,21 +432,27 @@ class Contents implements IContents {
       contentType: 'application/json',
     };
     var url = this._getUrl(path);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): IContentsModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): IContentsModel => {
       // will return 200 for an existing file and 201 for a new file
       if (success.xhr.status !== 200 && success.xhr.status !== 201) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateContentsModel(success.data);
+      validate.validateContentsModel(success.data);
       return success.data;
     });
   }
   
   /**
-   * Copy a file into a given directory via POST
+   * Copy a file into a given directory.
+   *
+   * #### Notes
    * The server will select the name of the copied file.
+   *
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  copy(fromFile: string, toDir: string): Promise<IContentsModel> {
+  copy(fromFile: string, toDir: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
     var settings = {
       method: "POST",
       data: JSON.stringify({copy_from: fromFile}),
@@ -211,43 +460,67 @@ class Contents implements IContents {
       dataType : "json",
     };
     var url = this._getUrl(toDir);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): IContentsModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): IContentsModel => {
       if (success.xhr.status !== 201) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateContentsModel(success.data);
+      validate.validateContentsModel(success.data);
       return success.data;
     });
   }
 
+  /** 
+   * List notebooks and directories at a given path.
+   *
+   * @param: path: The path to list notebooks in.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  listContents(path: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel> {
+    return this.get(path, {type: 'directory'}, ajaxOptions);
+  }
+
   /**
    * Create a checkpoint for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  createCheckpoint(path: string): Promise<ICheckpointModel> {
+  createCheckpoint(path: string, ajaxOptions?: IAjaxOptions): Promise<ICheckpointModel> {
     var settings = {
       method : "POST",
       dataType : "json",
     };
     var url = this._getUrl(path, 'checkpoints');
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): ICheckpointModel => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): ICheckpointModel => {
       if (success.xhr.status !== 201) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
-      validateCheckpointModel(success.data);
+      validate.validateCheckpointModel(success.data);
       return success.data;
     });
   }
 
   /** 
    * List available checkpoints for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents) and validates the response model.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  listCheckpoints(path: string): Promise<ICheckpointModel[]> {
+  listCheckpoints(path: string, ajaxOptions?: IAjaxOptions): Promise<ICheckpointModel[]> {
     var settings = {
       method : "GET",
       dataType: "json",
     };
     var url = this._getUrl(path, 'checkpoints');
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): ICheckpointModel[] => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): ICheckpointModel[] => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
@@ -255,7 +528,7 @@ class Contents implements IContents {
         throw Error('Invalid Checkpoint list');
       }
       for (var i = 0; i < success.data.length; i++) {
-        validateCheckpointModel(success.data[i]);
+        validate.validateCheckpointModel(success.data[i]);
       }
       return success.data;
     });
@@ -263,14 +536,19 @@ class Contents implements IContents {
 
   /**
    * Restore a file to a known checkpoint state.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  restoreCheckpoint(path: string, checkpointID: string): Promise<void> {
+  restoreCheckpoint(path: string, checkpointID: string, ajaxOptions?: IAjaxOptions): Promise<void> {
     var settings = {
       method : "POST",
       dataType: "json",
     };
     var url = this._getUrl(path, 'checkpoints', checkpointID);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): void => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): void => {
       if (success.xhr.status !== 204) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
@@ -280,83 +558,34 @@ class Contents implements IContents {
 
   /**
    * Delete a checkpoint for a file.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/contents).
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  deleteCheckpoint(path: string, checkpointID: string): Promise<void> {
+  deleteCheckpoint(path: string, checkpointID: string, ajaxOptions?: IAjaxOptions): Promise<void> {
     var settings = {
       method : "DELETE",
       dataType: "json",
     };
     var url = this._getUrl(path, 'checkpoints', checkpointID);
-    return utils.ajaxRequest(url, settings).then((success: utils.IAjaxSuccess): void => {
+    return utils.ajaxRequest(url, settings, ajaxOptions).then((success: utils.IAjaxSuccess): void => {
       if (success.xhr.status !== 204) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
     });
   }
 
-  /** 
-   * List notebooks and directories at a given path.
-   */
-  listContents(path: string): Promise<IContentsModel> {
-    return this.get(path, {type: 'directory'});
-  }
-
   /**
    * Get an REST url for this file given a path.
    */
   private _getUrl(...args: string[]): string {
-    var url_parts = [this._apiUrl].concat(
+    var url_parts = [].concat(
                 Array.prototype.slice.apply(args));
-    return utils.urlJoinEncode.apply(null, url_parts);
+    return utils.urlPathJoin(this._apiUrl,
+                             utils.urlJoinEncode.apply(null, url_parts));
   }
 
   private _apiUrl = "unknown";
-}
-
-
-/**
- * Validate a Contents Model.
- */
-function validateContentsModel(model: IContentsModel) {
-  var err = new Error('Invalid Contents Model');
-  if (!model.hasOwnProperty('name') || typeof model.name !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('path') || typeof model.path !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('type') || typeof model.type !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('created') || typeof model.created !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('last_modified') || 
-      typeof model.last_modified !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('mimetype')) {
-    throw err;
-  }
-  if (!model.hasOwnProperty('content')) {
-    throw err;
-  }
-  if (!model.hasOwnProperty('format')) {
-    throw err;
-  }
-}
-
-
-/**
- * Validate a Checkpoint model.
- */
-function validateCheckpointModel(model: ICheckpointModel) {
-  var err = new Error('Invalid Checkpoint Model');
-  if (!model.hasOwnProperty('id') || typeof model.id !== 'string') {
-    throw err;
-  }
-  if (!model.hasOwnProperty('last_modified') || 
-      typeof model.last_modified !== 'string') {
-    throw err;
-  }
 }

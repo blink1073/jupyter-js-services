@@ -10,6 +10,8 @@ import { INotebookSession, ISessionId, ISessionOptions } from './isession';
 
 import { connectToKernel } from './kernel';
 
+import { IAjaxOptions } from './utils';
+
 import * as utils from './utils';
 
 import * as validate from './validate';
@@ -22,15 +24,20 @@ var SESSION_SERVICE_URL = 'api/sessions';
 
 
 /**
- * Fetch the running sessions via API: GET /sessions
+ * Fetch the running sessions.
+ *
+ * #### Notes
+ * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/sessions), and validates the response.
+ *
+ * The promise is fulfilled on a valid response and rejected otherwise.
  */
 export
-function listRunningSessions(baseUrl: string): Promise<ISessionId[]> {
+function listRunningSessions(baseUrl: string, ajaxOptions?: IAjaxOptions): Promise<ISessionId[]> {
   var url = utils.urlPathJoin(baseUrl, SESSION_SERVICE_URL);
   return utils.ajaxRequest(url, {
     method: "GET",
     dataType: "json"
-  }).then((success: utils.IAjaxSuccess) => {
+  }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
     if (success.xhr.status !== 200) {
       throw Error('Invalid Status: ' + success.xhr.status);
     }
@@ -46,14 +53,19 @@ function listRunningSessions(baseUrl: string): Promise<ISessionId[]> {
 
 
 /**
- * Start a new session via API: POST /kernels
+ * Start a new session.
  *
+ * #### Notes
+ * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/sessions), and validates the response.
+ *
+ * The promise is fulfilled on a valid response and rejected otherwise.
+
  * Wrap the result in an NotebookSession object. The promise is fulfilled
  * when the session is fully ready to send the first message. If
  * the session fails to become ready, the promise is rejected.
  */
 export
-function startNewSession(options: ISessionOptions): Promise<INotebookSession> {
+function startNewSession(options: ISessionOptions, ajaxOptions?: IAjaxOptions): Promise<INotebookSession> {
   var url = utils.urlPathJoin(options.baseUrl, SESSION_SERVICE_URL);
   var model = {
     kernel: { name: options.kernelName },
@@ -64,7 +76,7 @@ function startNewSession(options: ISessionOptions): Promise<INotebookSession> {
     dataType: "json",
     data: JSON.stringify(model),
     contentType: 'application/json'
-  }).then((success: utils.IAjaxSuccess) => {
+  }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
     if (success.xhr.status !== 201) {
       throw Error('Invalid Status: ' + success.xhr.status);
     }
@@ -78,11 +90,13 @@ function startNewSession(options: ISessionOptions): Promise<INotebookSession> {
 /**
  * Connect to a running notebook session.
  *
+ * #### Notes
  * If the session was already started via `startNewSession`, the existing
  * NotebookSession object is used as the fulfillment value.
  *
  * Otherwise, if `options` are given, we attempt to connect to the existing
- * session.  The promise is fulfilled when the session is fully ready to send 
+ * session found by calling `listRunningSessions`. 
+ * The promise is fulfilled when the session is fully ready to send 
  * the first message. If the session fails to become ready, the promise is 
  * rejected.
  *
@@ -90,7 +104,7 @@ function startNewSession(options: ISessionOptions): Promise<INotebookSession> {
  * the promise is rejected.
  */
 export
-function connectToSession(id: string, options?: ISessionOptions): Promise<INotebookSession> {
+function connectToSession(id: string, options?: ISessionOptions, ajaxOptions?: IAjaxOptions): Promise<INotebookSession> {
   var session = runningSessions.get(id);
   if (session) {
     return Promise.resolve(session);
@@ -99,7 +113,7 @@ function connectToSession(id: string, options?: ISessionOptions): Promise<INoteb
     return Promise.reject(new Error('Please specify session options'));
   }
   return new Promise<NotebookSession>((resolve, reject) => {
-    listRunningSessions(options.baseUrl).then((sessionIds) => {
+    listRunningSessions(options.baseUrl, ajaxOptions).then((sessionIds) => {
       var sessionIds = sessionIds.filter(k => k.id === id);
       if (!sessionIds.length) {
         reject(new Error('No running session with id: ' + id));
@@ -117,7 +131,7 @@ function connectToSession(id: string, options?: ISessionOptions): Promise<INoteb
  * 
  * Fulfilled when the NotebookSession is Starting, or rejected if Dead.
  */
-function createSession(sessionId: ISessionId, options: ISessionOptions): Promise<NotebookSession> {
+function createSession(sessionId: ISessionId, options: ISessionOptions,ajaxOptions?: IAjaxOptions): Promise<NotebookSession> {
   return new Promise<NotebookSession>((resolve, reject) => {
     options.notebookPath = sessionId.notebook.path;
     var kernelOptions: IKernelOptions = {
@@ -127,7 +141,7 @@ function createSession(sessionId: ISessionId, options: ISessionOptions): Promise
       username: options.username,
       clientId: options.clientId
     }
-    var kernelPromise = connectToKernel(sessionId.kernel.id, kernelOptions);
+    var kernelPromise = connectToKernel(sessionId.kernel.id, kernelOptions, ajaxOptions);
     kernelPromise.then((kernel: IKernel) => {
       var session = new NotebookSession(options, sessionId.id, kernel);
       runningSessions.set(session.id, session);
@@ -154,6 +168,8 @@ class NotebookSession implements INotebookSession {
 
   /**
    * A signal emitted when the session dies.
+   *
+   * **See also:** [[sessionDied]]
    */
   static sessionDiedSignal = new Signal<INotebookSession, void>();
 
@@ -169,7 +185,7 @@ class NotebookSession implements INotebookSession {
   }
 
   /**
-   * Get the session died signal.
+   * A signal emitted when the session dies.
    */
   get sessionDied(): ISignal<INotebookSession, void> {
     return NotebookSession.sessionDiedSignal.bind(this);
@@ -177,6 +193,9 @@ class NotebookSession implements INotebookSession {
 
   /**
    * Get the session id.
+   *
+   * #### Notes
+   * This is a read-only property.
    */
   get id(): string {
     return this._id;
@@ -184,22 +203,34 @@ class NotebookSession implements INotebookSession {
 
   /**
    * Get the session kernel object.
-  */
+   *
+   * #### Notes
+   * This is a read-only property.
+   */
   get kernel() : IKernel {
     return this._kernel;
   }
 
   /**
    * Get the notebook path.
+   *
+   * #### Notes
+   * This is a read-only property.
    */
   get notebookPath(): string {
     return this._notebookPath;
   }
 
   /**
-   * Rename the notebook.
+   * Rename or move a notebook.
+   *
+   * @param path - The new notebook path.
+   *
+   * #### Notes
+   * This uses the Notebook REST API, and the response is validated.
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  renameNotebook(path: string): Promise<void> {
+  renameNotebook(path: string, ajaxOptions?: IAjaxOptions): Promise<void> {
     if (this._isDead) {
       return Promise.reject(new Error('Session is dead'));
     }
@@ -212,7 +243,7 @@ class NotebookSession implements INotebookSession {
       dataType: "json",
       data: JSON.stringify(model),
       contentType: 'application/json'
-    }).then((success: utils.IAjaxSuccess) => {
+    }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
       if (success.xhr.status !== 200) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
@@ -223,11 +254,14 @@ class NotebookSession implements INotebookSession {
   }
 
   /**
-   * DELETE /api/sessions/[:session_id]
-   *
    * Kill the kernel and shutdown the session.
+   *
+   * #### Notes
+   * Uses the [Jupyter Notebook API](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/jupyter-js-services/master/rest_api.yaml#!/sessions), and validates the response.
+   *
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  shutdown(): Promise<void> {
+  shutdown(ajaxOptions?: IAjaxOptions): Promise<void> {
     if (this._isDead) {
       return Promise.reject(new Error('Session is dead'));
     }
@@ -235,7 +269,7 @@ class NotebookSession implements INotebookSession {
     return utils.ajaxRequest(this._url, {
       method: "DELETE",
       dataType: "json"
-    }).then((success: utils.IAjaxSuccess) => {
+    }, ajaxOptions).then((success: utils.IAjaxSuccess) => {
       if (success.xhr.status !== 204) {
         throw Error('Invalid Status: ' + success.xhr.status);
       }
@@ -265,6 +299,7 @@ class NotebookSession implements INotebookSession {
   private _url = '';
   private _isDead = false;
 }
+
 
 /**
  * Handle an error on a session Ajax call.
