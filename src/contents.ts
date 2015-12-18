@@ -20,7 +20,7 @@ var SERVICE_CONTENTS_URL = 'api/contents';
 export
 interface IContentsOpts {
   /**
-   * The type of file. 
+   * The type of file.
    *
    * #### Notes
    * One of `{ "directory", "file", "notebook" }`
@@ -38,16 +38,16 @@ interface IContentsOpts {
   format?: string;
 
   /**
-   * The file contents, or whether to include the file contents.
+   * The file content, or whether to include the file contents.
    *
    * #### Notes
-   * Can either contain the contents of a file for upload, or a boolean
+   * Can either contain the content of a file for upload, or a boolean
    * indicating whether to include contents in the response.
    */
-  content?: string | boolean;
+  content?: any;
 
   /**
-   * The file extension, including a leading `.`. 
+   * The file extension, including a leading `.`.
    */
   ext?: string;
 
@@ -62,10 +62,10 @@ interface IContentsOpts {
  * Contents model.
  *
  * #### Notes
- * If the model does not contain content, the `content`, `format`, and 
- * `mimetype` keys will be `null`. 
+ * If the model does not contain content, the `content`, `format`, and
+ * `mimetype` keys will be `null`.
  */
-export 
+export
 interface IContentsModel {
 
   /**
@@ -77,7 +77,7 @@ interface IContentsModel {
   name: string;
 
   /**
-   * The full file path. 
+   * The full file path.
    *
    * #### Notes
    * It will *not* start with `/`, and it will be `/`-delimited.
@@ -85,7 +85,7 @@ interface IContentsModel {
   path: string;
 
   /**
-   * The type of file. 
+   * The type of file.
    *
    * #### Notes
    * One of `{ "directory", "file", "notebook" }`
@@ -116,9 +116,9 @@ interface IContentsModel {
   mimetype?: string;
 
   /**
-   * The file content. 
+   * The file content.
    */
-  content?: string;
+  content?: any;
 
   /**
    * The format of the file `content`.
@@ -135,10 +135,10 @@ interface IContentsModel {
 /**
  * Checkpoint model.
  */
-export 
+export
 interface ICheckpointModel {
   /**
-   * The unique identifier for the checkpoint. 
+   * The unique identifier for the checkpoint.
    */
   id: string;
 
@@ -152,12 +152,12 @@ interface ICheckpointModel {
 /**
  * Interface that a content manager should implement.
  **/
-export 
+export
 interface IContents {
   /**
    * Get a file or directory.
    *
-   * @param path: Path to the file or directory. 
+   * @param path: Path to the file or directory.
    * @param options: Use `options.content = true` to return file contents.
 
    * #### Notes
@@ -165,7 +165,7 @@ interface IContents {
    *
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  get(path: string, type: string, options: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
+  get(path: string, options: IContentsOpts, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
 
   /**
    * Create a new untitled file or directory in the specified directory path.
@@ -224,7 +224,7 @@ interface IContents {
    */
   copy(path: string, toDir: string, ajaxOptions?: IAjaxOptions): Promise<IContentsModel>;
 
-  /** 
+  /**
    * List notebooks and directories at a given path.
    *
    * @param: path: The path to list notebooks in.
@@ -246,7 +246,7 @@ interface IContents {
    */
   createCheckpoint(path: string, ajaxOptions?: IAjaxOptions): Promise<ICheckpointModel>;
 
-  /** 
+  /**
    * List available checkpoints for a file.
    *
    * #### Notes
@@ -279,11 +279,11 @@ interface IContents {
 
 
 /**
- * A contents handle passing file operations to the back-end.  
+ * A contents handle passing file operations to the back-end.
  *
  * This includes checkpointing with the normal file operations.
  */
-export 
+export
 class Contents implements IContents {
 
   /**
@@ -296,7 +296,7 @@ class Contents implements IContents {
   /**
    * Get a file or directory.
    *
-   * @param path: Path to the file or directory. 
+   * @param path: Path to the file or directory.
    * @param options: Use `options.content = true` to return file contents.
 
    * #### Notes
@@ -441,7 +441,7 @@ class Contents implements IContents {
       return success.data;
     });
   }
-  
+
   /**
    * Copy a file into a given directory.
    *
@@ -469,7 +469,7 @@ class Contents implements IContents {
     });
   }
 
-  /** 
+  /**
    * List notebooks and directories at a given path.
    *
    * @param: path: The path to list notebooks in.
@@ -506,7 +506,7 @@ class Contents implements IContents {
     });
   }
 
-  /** 
+  /**
    * List available checkpoints for a file.
    *
    * #### Notes
@@ -578,7 +578,7 @@ class Contents implements IContents {
   }
 
   /**
-   * Get an REST url for this file given a path.
+   * Get a REST url for this file given a path.
    */
   private _getUrl(...args: string[]): string {
     var url_parts = [].concat(

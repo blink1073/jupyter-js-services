@@ -51,7 +51,6 @@ const EXAMPLE_KERNEL_INFO: IKernelInfo = {
 
 const KERNEL_OPTIONS: IKernelOptions = {
   baseUrl: 'http://localhost:8888',
-  wsUrl: 'ws://localhost:8888',
   name: 'test',
   username: 'testUser'
 }
@@ -1082,6 +1081,15 @@ describe('jupyter.services - kernel', () => {
 
           });
         });
+      });
+
+      it('should have a read-only msgId attribute', (done) => {
+         createKernel().then(kernel => {
+           var future = kernel.execute({ code: 'hello' });
+           expect(typeof future.msgId).to.be('string');
+           expect(() => { future.msgId = 'bar'; }).to.throwError();
+           done();
+         });
       });
 
       it('should not dispose of KernelFuture when disposeOnDone=false', (done) => {
