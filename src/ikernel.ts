@@ -2,11 +2,17 @@
 // Distributed under the terms of the Modified BSD License.
 'use strict';
 
-import { IDisposable } from 'phosphor-disposable';
+import {
+  IDisposable
+} from 'phosphor-disposable';
 
-import { ISignal, Signal } from 'phosphor-signaling';
+import {
+  ISignal
+} from 'phosphor-signaling';
 
-import { IAjaxOptions } from './utils';
+import {
+  IAjaxSettings
+} from 'jupyter-js-utils';
 
 
 /**
@@ -17,7 +23,7 @@ interface IKernelOptions {
   /**
    * The kernel type (e.g. python3).
    */
-  name: string;
+  name?: string;
 
   /**
    * The root url of the kernel server.
@@ -39,6 +45,11 @@ interface IKernelOptions {
    * The unique identifier for the kernel client.
    */
   clientId?: string;
+
+  /**
+   * The default ajax settings to use for the kernel.
+   */
+  ajaxSettings?: IAjaxSettings;
 }
 
 
@@ -51,12 +62,12 @@ interface IKernelId {
   /**
    * Unique identifier of the kernel server session.
    */
-  id: string;
+  id?: string;
 
   /**
    * The name of the kernel.
    */
-  name: string;
+  name?: string;
 }
 
 
@@ -91,6 +102,190 @@ interface IKernelMessage {
   channel: string;
   buffers: (ArrayBuffer | ArrayBufferView)[];
 }
+
+
+/**
+ * IOPub stream kernel message specification.
+ *
+ * See [Streams](http://jupyter-client.readthedocs.org/en/latest/messaging.html#streams-stdout-stderr-etc).
+ */
+export
+interface IKernelIOPubStreamMessage extends IKernelMessage {
+  content: {
+    name: string;
+    text: string;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub stream message.
+ */
+export
+function isStreamMessage(msg: IKernelMessage): msg is IKernelIOPubStreamMessage {
+  return msg.header.msg_type === 'stream';
+}
+
+
+/**
+ * IOPub display_data kernel message specification.
+ *
+ * See [Display data](http://jupyter-client.readthedocs.org/en/latest/messaging.html#display-data).
+ */
+export
+interface IKernelIOPubDisplayDataMessage extends IKernelMessage {
+  content: {
+    source: string;
+    data: { [key: string]: string };
+    metadata: any;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub display_data message.
+ */
+export
+function isDisplayDataMessage(msg: IKernelMessage): msg is IKernelIOPubDisplayDataMessage {
+  return msg.header.msg_type === 'display_data';
+}
+
+
+/**
+ * IOPub execute_input kernel message specification.
+ *
+ * See [Code inputs](http://jupyter-client.readthedocs.org/en/latest/messaging.html#code-inputs).
+ */
+export
+interface IKernelIOPubExecuteInputMessage extends IKernelMessage {
+  content: {
+    code: string;
+    execution_count: number;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub execute_input message.
+ */
+export
+function isExecuteInputMessage(msg: IKernelMessage): msg is IKernelIOPubExecuteInputMessage {
+  return msg.header.msg_type === 'execute_input';
+}
+
+
+/**
+ * IOPub execute_result kernel message specification.
+ *
+ * See [Execution results](http://jupyter-client.readthedocs.org/en/latest/messaging.html#id4).
+ */
+export
+interface IKernelIOPubExecuteResultMessage extends IKernelMessage {
+  content: {
+    execution_count: number;
+    data: { [key: string]: string };
+    metadata: any;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub execute_result message.
+ */
+export
+function isExecuteResultMessage(msg: IKernelMessage): msg is IKernelIOPubExecuteResultMessage {
+  return msg.header.msg_type === 'execute_result';
+}
+
+
+/**
+ * IOPub error kernel message specification.
+ *
+ * See [Execution errors](http://jupyter-client.readthedocs.org/en/latest/messaging.html#execution-errors).
+ */
+export
+interface IKernelIOPubErrorMessage extends IKernelMessage {
+  content: {
+    execution_count: number;
+    ename: string;
+    evalue: string;
+    traceback: string[];
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub error message.
+ */
+export
+function isErrorMessage(msg: IKernelMessage): msg is IKernelIOPubErrorMessage {
+  return msg.header.msg_type === 'error';
+}
+
+
+/**
+ * IOPub kernel status message specification.
+ *
+ * See [Kernel status](http://jupyter-client.readthedocs.org/en/latest/messaging.html#kernel-status).
+ */
+export
+interface IKernelIOPubStatusMessage extends IKernelMessage {
+  content: {
+    execution_state: string;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub status message.
+ */
+export
+function isStatusMessage(msg: IKernelMessage): msg is IKernelIOPubStatusMessage {
+  return msg.header.msg_type === 'status';
+}
+
+
+/**
+ * IOPub clear_output kernel message specification.
+ *
+ * See [Clear output](http://jupyter-client.readthedocs.org/en/latest/messaging.html#clear-output).
+ */
+export
+interface IKernelIOPubClearOutputMessage extends IKernelMessage {
+  content: {
+    wait: boolean;
+  };
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub clear_output message.
+ */
+export
+function isClearOutputMessage(msg: IKernelMessage): msg is IKernelIOPubClearOutputMessage {
+  return msg.header.msg_type === 'clear_output';
+}
+
+
+/**
+ * IOPub comm_open kernel message specification.
+ *
+ * See [Comm open](http://jupyter-client.readthedocs.org/en/latest/messaging.html#opening-a-comm).
+ */
+export
+interface IKernelIOPubCommOpenMessage extends IKernelMessage {
+  content: ICommOpen;
+}
+
+
+/**
+ * Check if an IKernelMessage is an iopub comm_open message.
+ */
+export
+function isCommOpenMessage(msg: IKernelMessage): msg is IKernelIOPubCommOpenMessage {
+  return msg.header.msg_type === 'comm_open';
+}
+
 
 /**
  * Kernel information specification.
@@ -385,11 +580,6 @@ interface IKernel extends IDisposable {
   unhandledMessage: ISignal<IKernel, IKernelMessage>;
 
   /**
-   * A signal emitted for unhandled comm open message.
-   */
-  commOpened: ISignal<IKernel, ICommOpen>;
-
-  /**
    * The id of the server-side kernel.
    *
    * #### Notes
@@ -464,7 +654,7 @@ interface IKernel extends IDisposable {
    * The promise will be rejected if the kernel status is `Dead` or if the
    * request fails or the response is invalid.
    */
-  interrupt(ajaxOptions?: IAjaxOptions): Promise<void>;
+  interrupt(): Promise<void>;
 
   /**
    * Restart a kernel.
@@ -481,7 +671,7 @@ interface IKernel extends IDisposable {
    * The promise will be rejected if the kernel status is `Dead` or if the
    * request fails or the response is invalid.
    */
-  restart(ajaxOptions?: IAjaxOptions): Promise<void>;
+  restart(): Promise<void>;
 
   /**
    * Shutdown a kernel.
@@ -497,7 +687,7 @@ interface IKernel extends IDisposable {
    * The promise will be rejected if the kernel status is `Dead` or if the
    * request fails or the response is invalid.
    */
-  shutdown(ajaxOptions?: IAjaxOptions): Promise<void>;
+  shutdown(): Promise<void>;
 
   /**
    * Send a `kernel_info_request` message.
@@ -582,6 +772,64 @@ interface IKernel extends IDisposable {
    * If a client-side comm already exists, it is returned.
    */
   connectToComm(targetName: string, commId?: string): IComm;
+
+  /**
+   * Register a comm target handler.
+   *
+   * @param targetName - The name of the comm target.
+   *
+   * @param callback - The callback invoked for a comm open message.
+   *
+   * @returns A disposable used to unregister the comm target.
+   *
+   * #### Notes
+   * Only one comm target can be registered at a time, an existing
+   * callback will be overidden.  A registered comm target handler will take
+   * precedence over a comm which specifies a `target_module`.
+   */
+  registerCommTarget(targetName: string, callback: (comm: IComm, msg: IKernelIOPubCommOpenMessage) => void): IDisposable;
+
+  /**
+   * Get the kernel spec associated with the kernel.
+   */
+  getKernelSpec(): Promise<IKernelSpec>;
+
+  /**
+   * Optional default settings for ajax requests, if applicable.
+   */
+  ajaxSettings?: IAjaxSettings;
+}
+
+
+/**
+ * Object which manages kernel instances.
+ */
+export
+interface IKernelManager {
+  /**
+   * Get the available kernel specs.
+   */
+  getSpecs(options?: IKernelOptions): Promise<IKernelSpecIds>;
+
+  /**
+   * Get a list of running kernels.
+   */
+  listRunning(options?: IKernelOptions): Promise<IKernelId[]>;
+
+  /**
+   * Start a new kernel.
+   */
+  startNew(options?: IKernelOptions): Promise<IKernel>;
+
+  /**
+   * Find a kernel by id.
+   */
+  findById(id: string, options?: IKernelOptions): Promise<IKernelId>;
+
+  /**
+   * Connect to an existing kernel.
+   */
+  connectTo(id: string, options?: IKernelOptions): Promise<IKernel>;
 }
 
 
@@ -599,9 +847,9 @@ interface IKernel extends IDisposable {
 export
 interface IKernelFuture extends IDisposable {
   /**
-   * The unique id of the message.
+   * The original outgoing message.
    */
-  msgId: string;
+  msg: IKernelMessage;
 
   /**
    * Test whether the future is done.
@@ -708,14 +956,14 @@ interface IComm extends IDisposable {
    *
    * **See also:** [[ICommClose]], [[close]]
    */
-  onClose: (data?: any) => void;
+  onClose: (msg: IKernelMessage) => void;
 
   /**
    * Callback for a comm message received event.
    *
    * **See also:** [[ICommMsg]]
    */
-  onMsg: (data: any) => void;
+  onMsg: (msg: IKernelMessage) => void;
 
   /**
    * Open a comm with optional data and metadata.

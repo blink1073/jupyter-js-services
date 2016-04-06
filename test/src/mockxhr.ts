@@ -33,7 +33,7 @@ class MockXMLHttpRequest {
    *
    * It is automatically cleared after the request.
    */
-  static onRequest: () => void = null;
+  static onRequest: (request: MockXMLHttpRequest) => void = null;
 
   /**
    * Ready state of the request.
@@ -112,7 +112,7 @@ class MockXMLHttpRequest {
    */
   set onprogress(cb: () => void) {
     throw Error('Not implemented');
-    this._onProgress = cb;
+    //this._onProgress = cb;
   }
 
   /**
@@ -127,6 +127,20 @@ class MockXMLHttpRequest {
    */
   set ontimeout(cb: () => void) {
     this._onTimeout = cb;
+  }
+
+  /**
+   * Get the method of the request.
+   */
+  get method(): string {
+    return this._method;
+  }
+
+  /**
+   * Get the url of the request.
+   */
+  get url(): string {
+    return this._url;
   }
 
   /**
@@ -166,17 +180,22 @@ class MockXMLHttpRequest {
       this._data = data;
     }
     MockXMLHttpRequest.requests.push(this);
-    var onRequest = MockXMLHttpRequest.onRequest;
-    if (onRequest) onRequest();
-    MockXMLHttpRequest.onRequest = null;
-    if (this._timeout > 0) {
-      setTimeout(() => {
-        if (this._readyState != MockXMLHttpRequest.DONE) {
-          var cb = this._onTimeout;
-          if (cb) cb();
-        }
-      }, this._timeout);
-    }
+    setTimeout(() => {
+      if (MockXMLHttpRequest.requests.indexOf(this) === -1) {
+        console.error('Unhandled request:', JSON.stringify(this));
+        throw Error(`Unhandled request: ${JSON.stringify(this)}`)
+      }
+      var onRequest = MockXMLHttpRequest.onRequest;
+      if (onRequest) onRequest(this);
+      if (this._timeout > 0) {
+        setTimeout(() => {
+          if (this._readyState != MockXMLHttpRequest.DONE) {
+            var cb = this._onTimeout;
+            if (cb) cb();
+          }
+        }, this._timeout);
+      }
+    }, 0);
   }
 
   /**

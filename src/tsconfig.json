@@ -1,10 +1,8 @@
 {
   "compilerOptions": {
-    "experimentalDecorators": true,
     "declaration": true,
     "noImplicitAny": true,
     "noEmitOnError": true,
-    "sourceMap": true,
     "module": "commonjs",
     "moduleResolution": "node",
     "target": "ES5",
@@ -15,7 +13,6 @@
     "../typings/es6-collections/es6-collections.d.ts",
     "../typings/es6-promise/es6-promise.d.ts",
     "../typings/es6-dataview.d.ts",
-    "../typings/requirejs/r.d.ts",
     "index.ts",
     "config.ts",
     "contents.ts",
@@ -24,7 +21,6 @@
     "isession.ts",
     "serialize.ts",
     "session.ts",
-    "utils.ts",
     "validate.ts"
   ]
 }

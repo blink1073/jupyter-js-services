@@ -2,11 +2,22 @@
 // Distributed under the terms of the Modified BSD License.
 'use strict';
 
-import { ISignal, Signal } from 'phosphor-signaling';
+import {
+  IDisposable
+} from 'phosphor-disposable';
 
-import { IKernel, IKernelId, KernelStatus } from './ikernel';
+import {
+  ISignal
+} from 'phosphor-signaling';
 
-import { IAjaxOptions } from './utils';
+import {
+  IKernel, IKernelId, IKernelSpecIds, IKernelMessage,
+  KernelStatus
+} from './ikernel';
+
+import {
+  IAjaxSettings
+} from 'jupyter-js-utils';
 
 
 /**
@@ -16,7 +27,7 @@ export
 interface INotebookId {
 
   /**
-   * The full path to the notebook file. 
+   * The full path to the notebook file.
    */
   path: string;
 }
@@ -30,7 +41,7 @@ interface ISessionId {
 
   /**
    * The unique identifier for the session client.
-   */  
+   */
   id: string;
   notebook: INotebookId;
   kernel: IKernelId;
@@ -42,21 +53,25 @@ interface ISessionId {
  */
 export
 interface ISessionOptions {
-
   /**
    * The path (not including name) to the notebook.
    */
-  notebookPath: string;
+  notebookPath?: string;
 
   /**
    * The type of kernel (e.g. python3).
    */
-  kernelName: string;
+  kernelName?: string;
+
+  /**
+   * The id of an existing kernel.
+   */
+  kernelId?: string;
 
   /**
    * The root url of the notebook server.
    */
-  baseUrl: string;
+  baseUrl?: string;
 
   /**
    * The url to access websockets.
@@ -64,7 +79,7 @@ interface ISessionOptions {
   wsUrl?: string;
 
   /**
-   * The username of the session client. 
+   * The username of the session client.
    */
   username?: string;
 
@@ -72,6 +87,48 @@ interface ISessionOptions {
    * The unique identifier for the session client.
    */
   clientId?: string;
+
+  /**
+   * The default ajax settings to use for the session.
+   */
+  ajaxSettings?: IAjaxSettings;
+}
+
+
+/**
+ * Object which manages notebook session instances.
+ */
+export
+interface INotebookSessionManager {
+  /**
+   * Get the available kernel specs.
+   */
+  getSpecs(options?: ISessionOptions): Promise<IKernelSpecIds>;
+
+  /*
+   * Get the running sessions.
+   */
+  listRunning(options?: ISessionOptions): Promise<ISessionId[]>;
+
+  /**
+   * Start a new session.
+   */
+  startNew(options: ISessionOptions): Promise<INotebookSession>;
+
+  /**
+   * Find a session by id.
+   */
+  findById(id: string, options?: ISessionOptions): Promise<ISessionId>;
+
+  /**
+   * Find a session by notebook path.
+   */
+  findByPath(id: string, options?: ISessionOptions): Promise<ISessionId>;
+
+  /**
+   * Connect to a running notebook session.
+   */
+  connectTo(id: string, options?: ISessionOptions): Promise<INotebookSession>;
 }
 
 
@@ -79,11 +136,26 @@ interface ISessionOptions {
  * Interface of a notebook session object.
  */
 export
-interface INotebookSession {
+interface INotebookSession extends IDisposable {
   /**
-   * A signal emitted when the session dies.
+   * A signal emitted when the session is shut down.
    */
   sessionDied: ISignal<INotebookSession, void>;
+
+  /**
+   * A signal emitted when the kernel changes.
+   */
+  kernelChanged: ISignal<INotebookSession, IKernel>;
+
+  /**
+   * A signal emitted when the session status changes.
+   */
+  statusChanged: ISignal<INotebookSession, KernelStatus>;
+
+  /**
+   * A signal emitted for unhandled kernel message.
+   */
+  unhandledMessage: ISignal<INotebookSession, IKernelMessage>;
 
   /**
    * Unique id of the session.
@@ -105,9 +177,24 @@ interface INotebookSession {
    * The kernel.
    *
    * #### Notes
-   * This is a read-only property.
+   * This is a read-only property, and can be altered by [changeKernel].
+   * Use the [statusChanged] and [unhandledMessage] signals on the session
+   * instead of the ones on the kernel.
    */
   kernel: IKernel;
+
+  /**
+   * The current status of the session.
+   *
+   * #### Notes
+   * This is a read-only property, and is a delegate to the kernel status.
+   */
+  status: KernelStatus;
+
+  /**
+   * Optional default settings for ajax requests, if applicable.
+   */
+  ajaxSettings?: IAjaxSettings;
 
   /**
    * Rename or move a notebook.
@@ -118,7 +205,18 @@ interface INotebookSession {
    * This uses the Notebook REST API, and the response is validated.
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  renameNotebook(path: string, ajaxOptions?: IAjaxOptions): Promise<void>;
+  renameNotebook(path: string): Promise<void>;
+
+  /**
+   * Change the kernel.
+   *
+   * @params options - The name or id of the new kernel.
+   *
+   * #### Notes
+   * This shuts down the existing kernel and creates a new kernel,
+   * keeping the existing session ID and notebook path.
+   */
+  changeKernel(options: IKernelId): Promise<IKernel>;
 
   /**
    * Kill the kernel and shutdown the session.
@@ -127,5 +225,5 @@ interface INotebookSession {
    * This uses the Notebook REST API, and the response is validated.
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  shutdown(ajaxOptions?: IAjaxOptions): Promise<void>;
+  shutdown(): Promise<void>;
 }
