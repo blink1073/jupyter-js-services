@@ -124,6 +124,7 @@ class KernelFutureHandler extends DisposableDelegate implements IKernel.IFuture 
     this._reply = null;
     this._done = null;
     this._msg = null;
+    this._hooks.dispose();
     this._hooks = null;
     super.dispose();
   }
