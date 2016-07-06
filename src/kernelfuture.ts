@@ -206,7 +206,7 @@ class KernelFutureHandler extends DisposableDelegate implements IKernel.IFuture 
   private _iopub: (msg: KernelMessage.IIOPubMessage) => void = null;
   private _reply: (msg: KernelMessage.IShellMessage) => void = null;
   private _done: () => void = null;
-  private _hooks: Private.HookList<KernelMessage.IIOPubMessage> = null;
+  private _hooks = new Private.HookList<KernelMessage.IIOPubMessage>();
   private _disposeOnDone = true;
 }
 
