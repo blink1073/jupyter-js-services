@@ -2,10 +2,12 @@
   "private": true,
   "name": "browser-example",
   "dependencies": {
-    "jupyter-js-services": "file:../.."
+    "es6-promise": "^3.2.1",
+    "jupyter-js-services": "file:../..",
+    "jupyter-js-utils": "^0.4.0"
   },
   "scripts": {
-    "build": "tsc && webpack --config webpack.conf.js",
+    "build": "tsc && webpack",
     "clean": "rimraf build && rimraf node_modules",
     "update": "rimraf node_modules/jupyter-js-services && npm install"
   },

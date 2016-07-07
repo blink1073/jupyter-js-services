@@ -9,6 +9,11 @@ var services = require('jupyter-js-services');
 var utils = require('jupyter-js-utils');
 var ws = require('ws');
 var xhr = require('xmlhttprequest');
+var requirejs = require('requirejs');
+
+// Set up the global requirejs.
+// Normally this would then be configured.
+global.requirejs = requirejs;
 
 
 // Override the global request and socket functions.
@@ -24,12 +29,12 @@ var options = {
   baseUrl: BASE_URL,
   wsUrl: WS_URL,
   kernelName: 'python',
-  notebookPath: 'foo.ipynb'
+  path: 'foo.ipynb'
 }
 services.startNewSession(options).then(function(session) {
-  // Rename the notebook.
-  session.renameNotebook('bar.ipynb').then(function() {
-    console.log('Notebook renamed to', session.notebookPath);
+  // Rename the session.
+  session.rename('bar.ipynb').then(function() {
+    console.log('Session renamed to', session.path);
     // Execute and handle replies on the kernel.
     var future = session.kernel.execute({ code: 'a = 1' });
     future.onReply = function(reply) {

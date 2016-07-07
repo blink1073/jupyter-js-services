@@ -7,8 +7,8 @@ Javascript client for the Jupyter services REST APIs
 
 [REST API Docs](http://petstore.swagger.io/?url=https://raw.githubusercontent.com/jupyter/notebook/master/notebook/services/api/api.yaml)
 
-Note: All functions and methods using the REST API allow an optional
-`ajaxOptions` parameter to configure the request.
+Note: All functions and classes using the REST API allow an `ajaxOptions` 
+parameter to configure requests.
 
 
 Package Install
@@ -16,9 +16,11 @@ Package Install
 
 **Prerequisites**
 - [node](http://nodejs.org/)
+- [python](https://www.continuum.io/downloads)
 
 ```bash
 npm install --save jupyter-js-services
+conda install notebook  # notebook 4.2+ required
 ```
 
 
@@ -28,12 +30,14 @@ Source Build
 **Prerequisites**
 - [git](http://git-scm.com/)
 - [node 0.12+](http://nodejs.org/)
+- [python](https://www.continuum.io/downloads)
 
 ```bash
 git clone https://github.com/jupyter/jupyter-js-services.git
 cd jupyter-js-services
 npm install
 npm run build
+conda install notebook  # notebook 4.2+ required
 ```
 
 **Rebuild**
@@ -76,10 +80,19 @@ Earlier versions may also work, but come with no guarantees.
 - Firefox 32+
 - Chrome 38+
 
+Note: "requirejs" must be included in a global context for Comm targets.  
+This can be as a `<script>` tag in the browser or by using the `requirejs`
+package in node (`npm install requirejs` and setting 
+`global.requirejs = require('requirejs');`).  See the `examples` folder
+for usage.
+
 
 Starting the Notebook Server
 ----------------------------
-The library requires a running Jupyter Notebook server (development version), launched as:
+
+Follow the package install instructions first.
+
+The library requires a running Jupyter Notebook server, launched as:
 
 ```bash
 python -m notebook --NotebookApp.allow_origin="*"
@@ -90,8 +103,13 @@ The origin can be specified directly instead of using `*` if desired.
 
 Bundling for the Browser
 ------------------------
+
+Follow the package install instructions first.
+
 See `examples/browser` for an example of using Webpack to bundle the library.
 
+Note: Some browsers (such as IE11), require a polyfill for Promises.
+The example demonstrates the use of the polyfill.
 
 Usage from Node.js
 ------------------
@@ -127,7 +145,8 @@ A translator such as Babel can be used to convert from ES6 -> ES5.
 
 ```typescript
 import {
-  listRunningKernels, connectToKernel, startNewKernel, getKernelSpecs
+  KernelMessage, connectToKernel, getKernelSpecs, listRunningKernels,
+  startNewKernel
 } from 'jupyter-js-services';
 
 // The base url of the notebook server.
@@ -139,7 +158,7 @@ listRunningKernels({ baseUrl: BASE_URL }).then(kernelModels => {
   let options = {
     baseUrl: BASE_URL,
     name: kernelModels[0].name
-  }
+  };
   connectToKernel(kernelModels[0].id, options).then((kernel) => {
     console.log(kernel.name);
   });
@@ -154,29 +173,31 @@ getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
   let options = {
     baseUrl: BASE_URL,
     name: kernelSpecs.default
-  }
+  };
   startNewKernel(options).then(kernel => {
     // Execute and handle replies.
     let future = kernel.execute({ code: 'a = 1' } );
     future.onDone = () => {
       console.log('Future is fulfilled');
-    }
+    };
     future.onIOPub = (msg) => {
       console.log(msg.content);  // Print rich output data.
-    }
+    };
 
     // Restart the kernel and then send an inspect message.
     kernel.restart().then(() => {
-      let request = { code: 'hello', cursor_pos: 4, detail_level: 0};
+      let request: KernelMessage.IInspectRequest = {
+        code: 'hello', cursor_pos: 4, detail_level: 0
+      };
       kernel.inspect(request).then(reply => {
-        console.log(reply.data);
+        console.log(reply.content.data);
       });
     });
 
     // Interrupt the kernel and then send a complete message.
     kernel.interrupt().then(() => {
       kernel.complete({ code: 'impor', cursor_pos: 4 } ).then((reply) => {
-        console.log(reply.matches);
+        console.log(reply.content.matches);
       });
     });
 
@@ -193,15 +214,16 @@ getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
 });
 ```
 
-**NotebookSession**
+**Session**
 
 ```typescript
 import {
-  listRunningSessions, connectToSession, startNewSession
+  connectToSession, listRunningSessions, startNewSession
 } from 'jupyter-js-services';
 
-// The base url of the notebook server.
+// The base url of the Jupyter server.
 const BASE_URL = 'http://localhost:8000';
+
 
 
 // Get a list of available sessions and connect to one.
@@ -209,8 +231,8 @@ listRunningSessions({ baseUrl: BASE_URL }).then(sessionModels => {
   let options = {
     baseUrl: BASE_URL,
     kernelName: sessionModels[0].kernel.name,
-    notebookPath: sessionModels[0].notebook.path
-  }
+    path: sessionModels[0].notebook.path
+  };
   connectToSession(sessionModels[0].id, options).then((session) => {
     console.log(session.kernel.name);
   });
@@ -220,18 +242,19 @@ listRunningSessions({ baseUrl: BASE_URL }).then(sessionModels => {
 let options = {
   baseUrl: BASE_URL,
   kernelName: 'python',
-  notebookPath: '/tmp/foo.ipynb'
-}
+  path: '/tmp/foo.ipynb'
+};
+
 startNewSession(options).then(session => {
   // Execute and handle replies on the kernel.
   let future = session.kernel.execute({ code: 'a = 1' });
   future.onDone = () => {
     console.log('Future is fulfilled');
-  }
+  };
 
-  // Rename the notebook.
-  session.renameNotebook('/local/bar.ipynb').then(() => {
-    console.log('Notebook renamed to', session.notebookPath);
+  // Rename the session.
+  session.rename('/local/bar.ipynb').then(() => {
+    console.log('Session renamed to', session.path);
   });
 
   // Register a callback for when the session dies.
@@ -254,7 +277,7 @@ import {
   getKernelSpecs, startNewKernel
 } from 'jupyter-js-services';
 
-// The base url of the notebook server.
+// The base url of the Jupyter server.
 const BASE_URL = 'http://localhost:8000';
 
 
@@ -286,17 +309,18 @@ getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
     }
     comm.onMsg = (msg) => {
       console.log(msg);  // 'hello'
-    }
+    };
     comm.onClose = (msg) => {
       console.log(msg);  // 'bye'
-    }
+    };
   });
+
   let code = [
-    "from ipykernel.comm import Comm",
-    "comm = Comm(target_name='test2')",
-    "comm.send(data='hello')",
-    "comm.close(data='bye')"
-  ].join('\n')
+    'from ipykernel.comm import Comm',
+    'comm = Comm(target_name="test2")',
+    'comm.send(data="hello")',
+    'comm.close(data="bye")'
+  ].join('\n');
   kernel.execute({ code: code });
 });
 ```
@@ -308,53 +332,53 @@ import {
   ContentsManager
 } from 'jupyter-js-services';
 
-// The base url of the notebook server.
-const BASE_URL = 'http://localhost:8000';
+// The base url of the Jupyter server.
+let baseUrl = 'http://localhost:8000';
 
 
-let contents = new ContentsManager(BASE_URL);
+let contents = new ContentsManager({ baseUrl });
 
 // Create a new python file.
-contents.newUntitled("/foo", { type: "file", ext: "py" }).then(
+contents.newUntitled({ path: '/foo', type: 'file', ext: 'py' }).then(
   (model) => {
-    console.log(model.path);
+    console.log('new file:', model.path);
   }
 );
 
 // Get the contents of a directory.
-contents.get("/foo", { type: "directory", name: "bar" }).then(
+contents.get('/foo/bar').then(
   (model) => {
-    let files = model.content;
+    console.log('files:', model.content);
   }
-)
+);
 
 // Rename a file.
-contents.rename("/foo/bar.txt", "/foo/baz.txt");
+contents.rename('/foo/bar.txt', '/foo/baz.txt');
 
 // Save a file.
-contents.save("/foo", { type: "file", name: "test.py" });
+contents.save('/foo/test.ipynb');
 
 // Delete a file.
-contents.delete("/foo/bar.txt");
+contents.delete('/foo/bar.txt');
 
 // Copy a file.
-contents.copy("/foo/bar.txt", "/baz").then((model) => {
-    let newPath = model.path;
+contents.copy('/foo/bar.txt', '/baz').then((model) => {
+    console.log('new path', model.path);
 });
 
 // Create a checkpoint.
-contents.createCheckpoint("/foo/bar.ipynb").then((model) => {
+contents.createCheckpoint('/foo/bar.ipynb').then((model) => {
   let checkpoint = model;
 
   // Restore a checkpoint.
-  contents.restoreCheckpoint("/foo/bar.ipynb", checkpoint.id);
+  contents.restoreCheckpoint('/foo/bar.ipynb', checkpoint.id);
 
   // Delete a checkpoint.
-  contents.deleteCheckpoint("/foo/bar.ipynb", checkpoint.id);
+  contents.deleteCheckpoint('/foo/bar.ipynb', checkpoint.id);
 });
 
 // List checkpoints for a file.
-contents.listCheckpoints("/foo/bar.txt").then((models) => {
+contents.listCheckpoints('/foo/bar.txt').then((models) => {
     console.log(models[0].id);
 });
 ```
@@ -363,26 +387,35 @@ contents.listCheckpoints("/foo/bar.txt").then((models) => {
 
 ```typescript
 import {
-  startNewKernel, getKernelSpecs, getConfigSection, ConfigWithDefaults
+  ConfigWithDefaults, getConfigSection, getKernelSpecs, startNewKernel
 } from 'jupyter-js-services';
 
-// The base url of the notebook server.
-const BASE_URL = 'http://localhost:8000';
+// The base url of the Jupyter server.
+let baseUrl = 'http://localhost:8000';
+
+getConfigSection({ name: 'notebook', baseUrl }).then(section => {
+  let config = new ConfigWithDefaults({
+    section,
+    defaults: { default_cell_type: 'code' },
+    className: 'Notebook'
+  });
+  console.log(config.get('default_cell_type'));   // 'code'
+  config.set('foo', 'bar').then(data => {
+     console.log(data); // "{ 'foo': 'bar' }"
+  });
+});
+```
+
+**Terminals**
+
+```typescript
+import {
+  createTerminalSession
+} from 'jupyter-js-services';
 
 
-getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
-  return startNewKernel({
-    baseUrl: BASE_URL,
-    name: kernelSpecs.default,
-  });
-}).then(kernel => {
-  getConfigSection('notebook', BASE_URL).then(section => {
-    let defaults = { default_cell_type: 'code' };
-    let config = new ConfigWithDefaults(section, defaults, 'Notebook');
-    console.log(config.get('default_cell_type'));   // 'code'
-    config.set('foo', 'bar').then(data => {
-       console.log(data.foo); // 'bar'
-    });
-  });
+// Create a named terminal session and send some data.
+createTerminalSession({ name: 'foo' }).then(session => {
+  session.send({ type: 'stdin', content: ['foo'] });
 });
 ```

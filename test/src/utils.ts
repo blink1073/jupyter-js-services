@@ -2,8 +2,6 @@
 // Distributed under the terms of the Modified BSD License.
 'use strict';
 
-import expect = require('expect.js');
-
 import encoding = require('text-encoding');
 
 import {
@@ -11,21 +9,20 @@ import {
 } from 'jupyter-js-utils';
 
 import {
-  IKernel, IKernelInfo, IKernelMessage, IKernelMessageOptions,
-  IKernelOptions, createKernelMessage, startNewKernel
+  MockSocket, MockSocketServer, overrideWebSocket
+} from 'jupyter-js-utils/lib/mocksocket';
+
+import {
+  MockXMLHttpRequest
+} from 'jupyter-js-utils/lib/mockxhr';
+
+import {
+  IContents, IKernel, KernelMessage, createKernelMessage, startNewKernel
 } from '../../lib';
 
 import {
   deserialize, serialize
 } from '../../lib/serialize';
-
-import {
-  MockSocket, MockSocketServer, overrideWebSocket
-} from './mocksocket';
-
-import {
-  MockXMLHttpRequest
-} from './mockxhr';
 
 
 // stub for node global
@@ -35,40 +32,21 @@ declare var global: any;
 overrideWebSocket();
 
 
+/**
+ * Optional ajax arguments.
+ */
 export
-class RequestHandler {
-  /**
-   * Create a new RequestHandler.
-   */
-  constructor(onRequest?: (request: MockXMLHttpRequest) => void) {
-    if (typeof window === 'undefined') {
-      global.XMLHttpRequest = MockXMLHttpRequest;
-      global.TextEncoder = encoding.TextEncoder;
-      global.TextDecoder = encoding.TextDecoder;
-    } else {
-      (<any>window).XMLHttpRequest = MockXMLHttpRequest;
-    }
-    MockXMLHttpRequest.requests = [];
-    this.onRequest = onRequest;
-  }
-
-  set onRequest(cb: (request: MockXMLHttpRequest) => void) {
-    MockXMLHttpRequest.onRequest = cb;
-  }
-
-  /**
-   * Respond to the latest Ajax request.
-   */
-  respond(statusCode: number, data: any, header?: any): void {
-    var len = MockXMLHttpRequest.requests.length;
-    var request = MockXMLHttpRequest.requests[len - 1];
-    request.respond(statusCode, data, header);
-  }
-}
+const ajaxSettings: IAjaxSettings = {
+  timeout: 10,
+  requestHeaders: { foo: 'bar', fizz: 'buzz' },
+  withCredentials: true,
+  user: 'foo',
+  password: 'bar'
+};
 
 
-export 
-const EXAMPLE_KERNEL_INFO: IKernelInfo = {
+export
+const EXAMPLE_KERNEL_INFO: KernelMessage.IInfoReply = {
   protocol_version: '1',
   implementation: 'a',
   implementation_version: '1',
@@ -84,22 +62,84 @@ const EXAMPLE_KERNEL_INFO: IKernelInfo = {
   banner: '',
   help_links: {
   }
-}
+};
+
 
 export
-const KERNEL_OPTIONS: IKernelOptions = {
+const KERNEL_OPTIONS: IKernel.IOptions = {
   baseUrl: 'http://localhost:8888',
   name: 'python',
   username: 'testUser',
-}
+};
 
 
 export
-const AJAX_KERNEL_OPTIONS: IKernelOptions = {
+const AJAX_KERNEL_OPTIONS: IKernel.IOptions = {
   baseUrl: 'http://localhost:8888',
   name: 'python',
   username: 'testUser',
   ajaxSettings: ajaxSettings
+};
+
+
+export
+const PYTHON_SPEC: IKernel.ISpecModel = {
+  name: 'Python',
+  spec: {
+    language: 'python',
+    argv: [],
+    display_name: 'python',
+    codemirror_mode: 'python',
+    env: {},
+    help_links: [ { text: 're', url: 'reUrl' }]
+  },
+  resources: { foo: 'bar' },
+};
+
+
+export
+const DEFAULT_FILE: IContents.IModel = {
+  name: 'test',
+  path: '',
+  type: 'file',
+  created: 'yesterday',
+  last_modified: 'today',
+  writable: true,
+  mimetype: 'text/plain',
+  content: 'hello, world!',
+  format: 'text'
+};
+
+
+export
+class RequestHandler {
+  /**
+   * Create a new RequestHandler.
+   */
+  constructor(onRequest?: (request: MockXMLHttpRequest) => void) {
+    if (typeof window === 'undefined') {
+      global.XMLHttpRequest = MockXMLHttpRequest;
+      global.TextEncoder = encoding.TextEncoder;
+      global.TextDecoder = encoding.TextDecoder;
+    } else {
+      (window as any).XMLHttpRequest = MockXMLHttpRequest;
+    }
+    MockXMLHttpRequest.requests = [];
+    this.onRequest = onRequest;
+  }
+
+  set onRequest(cb: (request: MockXMLHttpRequest) => void) {
+    MockXMLHttpRequest.onRequest = cb;
+  }
+
+  /**
+   * Respond to the latest Ajax request.
+   */
+  respond(statusCode: number, data: any, header?: any): void {
+    let len = MockXMLHttpRequest.requests.length;
+    let request = MockXMLHttpRequest.requests[len - 1];
+    request.respond(statusCode, data, header);
+  }
 }
 
 
@@ -129,8 +169,8 @@ class KernelTester extends RequestHandler {
           let onMessage = this._onMessage;
           if (onMessage) onMessage(data);
         }
-      }
-    }
+      };
+    };
   }
 
   get initialStatus(): string {
@@ -142,11 +182,11 @@ class KernelTester extends RequestHandler {
   }
 
   sendStatus(status: string) {
-    let options: IKernelMessageOptions = {
+    let options: KernelMessage.IOptions = {
       msgType: 'status',
       channel: 'iopub',
       session: uuid(),
-    }
+    };
     let msg = createKernelMessage(options, { execution_state: status } );
     this.send(msg);
   }
@@ -163,7 +203,7 @@ class KernelTester extends RequestHandler {
   /**
    * Register a message callback with the websocket server.
    */
-  onMessage(cb: (msg: IKernelMessage) => void) {
+  onMessage(cb: (msg: KernelMessage.IMessage) => void) {
     this._onMessage = cb;
   }
 
@@ -179,7 +219,7 @@ class KernelTester extends RequestHandler {
   /**
    * Send a message to the server.
    */
-  send(msg: IKernelMessage) {
+  send(msg: KernelMessage.IMessage) {
     this._promiseDelegate.promise.then(() => {
       this._server.send(serialize(msg));
     });
@@ -191,11 +231,11 @@ class KernelTester extends RequestHandler {
   triggerError(msg: string) {
     this._promiseDelegate.promise.then(() => {
       this._server.triggerError(msg);
-    })
+    });
   }
 
   private _server: MockSocketServer = null;
-  private _onMessage: (msg: IKernelMessage) => void = null;
+  private _onMessage: (msg: KernelMessage.IMessage) => void = null;
   private _promiseDelegate: PromiseDelegate<void> = null;
   private _initialStatus = 'starting';
 }
@@ -219,12 +259,12 @@ function createKernel(tester?: KernelTester): Promise<IKernel> {
  * Expect a failure on a promise with the given message, then call `done`.
  */
 export
-function expectFailure(promise: Promise<any>, done: () => void, message: string): Promise<any> {
+function expectFailure(promise: Promise<any>, done: () => void, message?: string): Promise<any> {
   return promise.then((msg: any) => {
     console.error('***should not reach this point');
     throw Error('Should not reach this point');
   }).catch((error) => {
-    if (error.message.indexOf(message) === -1) {
+    if (message && error.message.indexOf(message) === -1) {
       console.error('****', message, 'not in:', error.message);
       return;
     }
@@ -239,17 +279,4 @@ function expectFailure(promise: Promise<any>, done: () => void, message: string)
 export
 function doLater(cb: () => void): void {
   Promise.resolve().then(cb);
-}
-
-
-/**
- * Optional ajax arguments.
- */
-export
-var ajaxSettings: IAjaxSettings = {
-  timeout: 10,
-  requestHeaders: { foo: 'bar', fizz: 'buzz' },
-  withCredentials: true,
-  user: 'foo',
-  password: 'bar'
 }

@@ -1,11 +1,11 @@
 {
   "name": "jupyter-js-services",
-  "version": "0.7.1",
+  "version": "0.12.1",
   "description": "Client APIs for the Jupyter services REST APIs",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "dependencies": {
-    "jupyter-js-utils": "^0.3",
+    "jupyter-js-utils": "^0.4.0",
     "phosphor-disposable": "^1.0.5",
     "phosphor-signaling": "^1.2.0"
   },
@@ -13,10 +13,12 @@
     "expect.js": "^0.3.1",
     "istanbul": "^0.3.18",
     "mocha": "^2.2.5",
+    "requirejs": "^2.2.0",
     "rimraf": "^2.4.2",
     "text-encoding": "^0.5.2",
-    "typedoc": "^0.3.11",
-    "typescript": "^1.6.2",
+    "typedoc": "^0.4.4",
+    "typescript": "^1.8.0",
+    "webpack": "^1.13.1",
     "ws": "^1.0.1",
     "xmlhttprequest": "^1.8.0"
   },
@@ -25,16 +27,16 @@
     "phosphor-signaling": "^1.2.0"
   },
   "scripts": {
-    "clean": "rimraf docs && rimraf lib && rimraf test/build",
+    "clean": "rimraf docs && rimraf lib && rimraf test/build && rimraf test/coverage",
     "build:src": "tsc --project src",
     "build:test": "tsc --project test/src",
     "build": "npm run build:src && npm run build:test",
     "example:browser": "cd examples/browser && npm run update && npm run build",
     "example:node": "cd examples/node && npm install",
     "build:examples": "npm run example:browser && npm run example:node",
-    "docs": "typedoc --options scripts/tdoptions.json",
-    "prepublish": "npm run build",
-    "test:coverage": "cd test && istanbul cover _mocha -- build/test*.js",
+    "docs": "typedoc --mode file --module commonjs --excludeNotExported --target es5 --moduleResolution node --out docs/ src",
+    "prepublish": "npm run build && webpack",
+    "test:coverage": "istanbul cover --dir test/coverage _mocha -- test/build/test*.js",
     "test:integration": "cd test && python integration_test.py",
     "test:debug": "mocha test/build/test*.js --debug-brk",
     "test": "mocha test/build/test*.js"
@@ -50,7 +52,8 @@
   ],
   "files": [
     "lib/*.js",
-    "lib/*.d.ts"
+    "lib/*.d.ts",
+    "dist/*.js"
   ],
   "author": "Project Jupyter",
   "license": "BSD-3-Clause",
