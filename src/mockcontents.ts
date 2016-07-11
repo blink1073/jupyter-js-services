@@ -22,13 +22,30 @@ class MockContentsManager implements IContents.IManager {
    * Create a file with default content.
    */
   createFile(path: string): void {
-    let model: IContents.IModel = {
+    this._files[path] = {
       name: path.split('/').pop(),
       path: path,
       type: 'file',
       content: this.DEFAULT_TEXT
     };
-    this._files[path] = model;
+  }
+
+  /**
+   * Create a directory with some default content.
+   */
+  createFolder(path: string): void {
+    if (path[path.length - 1] === '\\') {
+      path = path.slice(0, path.length - 1);
+    }
+    for (let name in ['foo', 'bar', 'baz']) {
+      let file = `${path}/${name}.txt`;
+      this.createFile(file);
+    }
+    this._files[path] = {
+      name: path.split('/').pop(),
+      path,
+      type: 'directory'
+    };
   }
 
   /**
@@ -36,9 +53,23 @@ class MockContentsManager implements IContents.IManager {
    */
   get(path: string, options: IContents.IFetchOptions = {}): Promise<IContents.IModel> {
     this.methods.push('get');
+    if (path[path.length - 1] === '\\') {
+      path = path.slice(0, path.length - 1);
+    }
     let model = this._files[path];
     if (!model) {
       return Promise.reject(new Error('Path not found'));
+    }
+    if (model.type === 'directory') {
+      let content: IContents.IModel[] = [];
+      for (path in this._files) {
+        let file = this._files[path];
+        let dname = path.slice(0, path.length - file.name.length - 1);
+        if (dname === model.path) {
+          content.push(file);
+        }
+      }
+      model.content = content;
     }
     return Promise.resolve(this._copyModel(model));
   }
