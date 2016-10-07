@@ -145,8 +145,7 @@ A translator such as Babel can be used to convert from ES6 -> ES5.
 
 ```typescript
 import {
-  KernelMessage, connectToKernel, getKernelSpecs, listRunningKernels,
-  startNewKernel
+  KernelMessage, Kernel
 } from 'jupyter-js-services';
 
 // The base url of the notebook server.
@@ -154,27 +153,27 @@ const BASE_URL = 'http://localhost:8000';
 
 
 // Get a list of available kernels and connect to one.
-listRunningKernels({ baseUrl: BASE_URL }).then(kernelModels => {
-  let options = {
+Kernel.listRunning({ baseUrl: BASE_URL }).then(kernelModels => {
+  let options: Kernel.IOptions = {
     baseUrl: BASE_URL,
     name: kernelModels[0].name
   };
-  connectToKernel(kernelModels[0].id, options).then((kernel) => {
+  Kernel.connectTo(kernelModels[0].id, options).then((kernel) => {
     console.log(kernel.name);
   });
 });
 
 
 // Get info about the available kernels and start a new one.
-getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
+Kernel.getSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
   console.log('Default spec:', kernelSpecs.default);
   console.log('Available specs', Object.keys(kernelSpecs.kernelspecs));
   // use the default name
-  let options = {
+  let options: Kernel.IOptions = {
     baseUrl: BASE_URL,
     name: kernelSpecs.default
   };
-  startNewKernel(options).then(kernel => {
+  Kernel.startNew(options).then(kernel => {
     // Execute and handle replies.
     let future = kernel.execute({ code: 'a = 1' } );
     future.onDone = () => {
@@ -218,7 +217,7 @@ getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
 
 ```typescript
 import {
-  connectToSession, listRunningSessions, startNewSession
+  Session
 } from 'jupyter-js-services';
 
 // The base url of the Jupyter server.
@@ -227,13 +226,13 @@ const BASE_URL = 'http://localhost:8000';
 
 
 // Get a list of available sessions and connect to one.
-listRunningSessions({ baseUrl: BASE_URL }).then(sessionModels => {
+Session.listRunning({ baseUrl: BASE_URL }).then(sessionModels => {
   let options = {
     baseUrl: BASE_URL,
     kernelName: sessionModels[0].kernel.name,
     path: sessionModels[0].notebook.path
   };
-  connectToSession(sessionModels[0].id, options).then((session) => {
+  session.connectTo(sessionModels[0].id, options).then((session) => {
     console.log(session.kernel.name);
   });
 });
@@ -245,7 +244,7 @@ let options = {
   path: '/tmp/foo.ipynb'
 };
 
-startNewSession(options).then(session => {
+Session.startNew(options).then(session => {
   // Execute and handle replies on the kernel.
   let future = session.kernel.execute({ code: 'a = 1' });
   future.onDone = () => {
@@ -274,7 +273,7 @@ startNewSession(options).then(session => {
 
 ```typescript
 import {
-  getKernelSpecs, startNewKernel
+  Kernel
 } from 'jupyter-js-services';
 
 // The base url of the Jupyter server.
@@ -284,8 +283,8 @@ const BASE_URL = 'http://localhost:8000';
 // Create a comm from the server side.
 //
 // Get info about the available kernels and connect to one.
-getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
-  return startNewKernel({
+Kernel.getSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
+  return Kernel.startNew({
     baseUrl: BASE_URL,
     name: kernelSpecs.default,
   });
@@ -298,7 +297,7 @@ getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
 
 // Create a comm from the client side.
 getKernelSpecs({ baseUrl: BASE_URL }).then(kernelSpecs => {
-  return startNewKernel({
+  return kernel.startNew({
     baseUrl: BASE_URL,
     name: kernelSpecs.default,
   });
@@ -387,13 +386,13 @@ contents.listCheckpoints('/foo/bar.txt').then((models) => {
 
 ```typescript
 import {
-  ConfigWithDefaults, getConfigSection, getKernelSpecs, startNewKernel
+  ConfigWithDefaults, ConfigSection
 } from 'jupyter-js-services';
 
 // The base url of the Jupyter server.
 let baseUrl = 'http://localhost:8000';
 
-getConfigSection({ name: 'notebook', baseUrl }).then(section => {
+ConfigSection.create({ name: 'notebook', baseUrl }).then(section => {
   let config = new ConfigWithDefaults({
     section,
     defaults: { default_cell_type: 'code' },
@@ -410,12 +409,12 @@ getConfigSection({ name: 'notebook', baseUrl }).then(section => {
 
 ```typescript
 import {
-  createTerminalSession
+  TerminalSession
 } from 'jupyter-js-services';
 
 
 // Create a named terminal session and send some data.
-createTerminalSession({ name: 'foo' }).then(session => {
+TerminalSession.open({ name: 'foo' }).then(session => {
   session.send({ type: 'stdin', content: ['foo'] });
 });
 ```

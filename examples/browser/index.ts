@@ -9,27 +9,23 @@
 import 'es6-promise';
 
 import {
-  startNewSession
+  Session, utils
 } from 'jupyter-js-services';
 
-import {
-  getBaseUrl, getWsUrl
-} from 'jupyter-js-utils';
 
-
-const BASE_URL = getBaseUrl();
-const WS_URL = getWsUrl();
+const BASE_URL = utils.getBaseUrl();
+const WS_URL = utils.getWsUrl();
 
 
 function main() {
   // Start a new session.
-  let options = {
+  let options: Session.IOptions = {
     baseUrl: BASE_URL,
     wsUrl: WS_URL,
     kernelName: 'python',
     path: 'foo.ipynb'
   };
-  startNewSession(options).then(session => {
+  Session.startNew(options).then(session => {
     // Rename the session.
     session.rename('bar.ipynb').then(() => {
       console.log('Session renamed to', session.path);

@@ -1,30 +1,34 @@
 {
   "name": "jupyter-js-services",
-  "version": "0.12.1",
+  "version": "0.20.0",
   "description": "Client APIs for the Jupyter services REST APIs",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
   "dependencies": {
-    "jupyter-js-utils": "^0.4.0",
-    "phosphor-disposable": "^1.0.5",
-    "phosphor-signaling": "^1.2.0"
+    "minimist": "^1.2.0",
+    "path-posix": "^1.0.0",
+    "phosphor": "^0.5.0",
+    "requirejs": "^2.2.0",
+    "url-join": "^1.1.0"
   },
   "devDependencies": {
+    "@types/expect.js": "^0.3.29",
+    "@types/minimist": "^1.1.29",
+    "@types/mocha": "^2.2.32",
+    "@types/node": "^6.0.42",
+    "@types/text-encoding": "0.0.30",
+    "@types/ws": "0.0.33",
     "expect.js": "^0.3.1",
     "istanbul": "^0.3.18",
     "mocha": "^2.2.5",
     "requirejs": "^2.2.0",
     "rimraf": "^2.4.2",
     "text-encoding": "^0.5.2",
-    "typedoc": "^0.4.4",
-    "typescript": "^1.8.0",
+    "typedoc": "github:jasongrout/typedoc#ts2",
+    "typescript": "^2.0.3",
     "webpack": "^1.13.1",
     "ws": "^1.0.1",
     "xmlhttprequest": "^1.8.0"
-  },
-  "peerDependencies": {
-    "phosphor-disposable": "^1.0.5",
-    "phosphor-signaling": "^1.2.0"
   },
   "scripts": {
     "clean": "rimraf docs && rimraf lib && rimraf test/build && rimraf test/coverage",
@@ -36,10 +40,10 @@
     "build:examples": "npm run example:browser && npm run example:node",
     "docs": "typedoc --mode file --module commonjs --excludeNotExported --target es5 --moduleResolution node --out docs/ src",
     "prepublish": "npm run build && webpack",
-    "test:coverage": "istanbul cover --dir test/coverage _mocha -- test/build/test*.js",
+    "test:coverage": "istanbul cover --dir test/coverage _mocha -- test/build/test*.js \"test/build/**/*.spec.js\" --foo bar",
     "test:integration": "cd test && python integration_test.py",
-    "test:debug": "mocha test/build/test*.js --debug-brk",
-    "test": "mocha test/build/test*.js"
+    "test:debug": "mocha test/build/test*.js \"test/build/**/*.spec.js\" --foo bar --debug-brk",
+    "test": "mocha test/build/test*.js \"test/build/**/*.spec.js\" --foo bar"
   },
   "repository": {
     "type": "git",
@@ -51,9 +55,12 @@
     "notebook"
   ],
   "files": [
+    "lib/**/*.js",
+    "lib/**/*.d.ts",
     "lib/*.js",
     "lib/*.d.ts",
-    "dist/*.js"
+    "dist/*.js",
+    "dist/**/*.js"
   ],
   "author": "Project Jupyter",
   "license": "BSD-3-Clause",
