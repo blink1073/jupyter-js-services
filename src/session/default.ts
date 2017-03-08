@@ -44,7 +44,7 @@ class DefaultSession implements Session.IWritableSession {
   /**
    * Construct a new session.
    */
-  constructor(options: Session.IOptions, kernel: Kernel.IKernel) {
+  constructor(options: Session.IOptions, kernel: Kernel.IKernel | null) {
     this._id = id;
     this._path = options.path;
     this._baseUrl = options.baseUrl || utils.getBaseUrl();
@@ -100,9 +100,9 @@ class DefaultSession implements Session.IWritableSession {
   }
 
   /**
-   * Get the session id.
+   * Get the current session id.
    */
-  get id(): string {
+  get id(): string | null {
     return this._id;
   }
 
@@ -126,15 +126,43 @@ class DefaultSession implements Session.IWritableSession {
   }
 
   /**
+   * The name of the session.
+   */
+  get name(): string {
+    return this._name;
+  }
+
+  /**
+   * The type of the session.
+   */
+  get type(): string {
+    return this._type;
+  }
+
+  /**
+   * The default kernel name.  If not given, the server default will
+   * be used as the default.
+   */
+  get defaultKernelName(): string {
+    return this._defaultKernelName;
+  }
+  set defaultKernelName(value: string) {
+    this._defaultKernelName = value;
+  }
+
+  /**
    * Get the model associated with the session.
    */
   get model(): Session.IModel {
+    let kernel = (
+      this.kernel ? this.kernel.model : { name: this._defaultKernelName}
+    );
     return {
       id: this.id,
-      kernel: this.kernel.model,
-      notebook: {
-        path: this.path
-      }
+      kernel,
+      path: this._path,
+      type: this._type,
+      name: this._name
     };
   }
 
@@ -240,30 +268,71 @@ class DefaultSession implements Session.IWritableSession {
    * This uses the Jupyter REST API, and the response is validated.
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  rename(path: string): Promise<void> {
+  setPath(path: string): Promise<void> {
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
     }
-    let data = JSON.stringify({
-      notebook: { path }
-    });
+    let data = JSON.stringify({ path });
+    return this._patch(data).then(() => { return void 0; });
+  }
+
+
+  /**
+   * Change the session name.
+   *
+   * @param path - The new session name.
+   *
+   * #### Notes
+   * This uses the Jupyter REST API, and the response is validated.
+   * The promise is fulfilled on a valid response and rejected otherwise.
+   */
+  setName(name: string): Promise<void> {
+    if (this.isDisposed) {
+      return Promise.reject(new Error('Session is disposed'));
+    }
+    let data = JSON.stringify({ name });
     return this._patch(data).then(() => { return void 0; });
   }
 
   /**
-   * Change the kernel.
+   * Change the session type.
    *
-   * @params options - The name or id of the new kernel.
+   * @param path - The new session type.
    *
    * #### Notes
-   * This shuts down the existing kernel and creates a new kernel,
-   * keeping the existing session ID and session path.
+   * This uses the Jupyter REST API, and the response is validated.
+   * The promise is fulfilled on a valid response and rejected otherwise.
    */
-  changeKernel(options: Kernel.IModel): Promise<Kernel.IKernel> {
+  setType(type: string): Promise<void> {
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
     }
-    this._kernel.dispose();
+    let data = JSON.stringify({ type });
+    return this._patch(data).then(() => { return void 0; });
+  }
+
+  /**
+   * Start a kernel.
+   *
+   * @param options - The name or id of the new kernel.  Defaults
+   *   to the default kernel for the session.
+   *
+   * @returns A promise that resolves with the new kernel object.
+   *
+   * #### Notes
+   * This shuts down the existing kernel and creates a new kernel,
+   * keeping the existing session path.
+   */
+  startKernel(options?: Kernel.IModel): Promise<Kernel.IKernel> {
+    if (this.isDisposed) {
+      return Promise.reject(new Error('Session is disposed'));
+    }
+    if (this._kernel) {
+      this._kernel.dispose();
+    }
+    if (options === void 0) {
+      options = { name: this._defaultKernelName };
+    }
     let data = JSON.stringify({ kernel: options });
     return this._patch(data).then(() => {
       return this.kernel;
@@ -289,8 +358,11 @@ class DefaultSession implements Session.IWritableSession {
   /**
    * Handle connections to a kernel.
    */
-  protected setupKernel(kernel: Kernel.IKernel): void {
+  protected setupKernel(kernel: Kernel.IKernel | null): void {
     this._kernel = kernel;
+    if (!kernel) {
+      return;
+    }
     kernel.statusChanged.connect(this.onKernelStatus, this);
     kernel.unhandledMessage.connect(this.onUnhandledMessage, this);
     kernel.iopubMessage.connect(this.onIOPubMessage, this);
@@ -362,9 +434,11 @@ class DefaultSession implements Session.IWritableSession {
 
   private _id = '';
   private _path = '';
+  private _name = '';
+  private _type = '';
   private _ajaxSettings = '';
   private _token = '';
-  private _kernel: Kernel.IKernel = null;
+  private _kernel: Kernel.IKernel | null = null;
   private _uuid = '';
   private _baseUrl = '';
   private _options: Session.IOptions = null;

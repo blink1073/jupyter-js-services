@@ -119,7 +119,7 @@ namespace Session {
      *
      * #### Notes
      * This shuts down the existing kernel and creates a new kernel,
-     * keeping the existing session ID and path.
+     * keeping the existing session path.
      */
     startKernel(options?: Kernel.IModel): Promise<Kernel.IKernel>;
 
@@ -309,6 +309,11 @@ namespace Session {
      * The path (not including name) to the session.
      */
     path: string;
+
+    /**
+     * The name of the default kernel.
+     */
+    defaultKernelName: string;
 
     /**
      * The name of the session.
