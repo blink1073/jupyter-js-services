@@ -206,18 +206,6 @@ class DefaultSession implements Session.IWritableSession {
   }
 
   /**
-   * Clone the current session with a new clientId.
-   */
-  clone(): Promise<Session.ISession> {
-    let options = this._getKernelOptions();
-    return Kernel.connectTo(this.kernel.id, options).then(kernel => {
-      options = utils.copy(this._options);
-      options.ajaxSettings = this.ajaxSettings;
-      return new DefaultSession(options, this._id);
-    });
-  }
-
-  /**
    * Update the session based on a session model from the server.
    */
   update(model: Session.IModel): Promise<void> {
@@ -241,7 +229,7 @@ class DefaultSession implements Session.IWritableSession {
         this.setupKernel(kernel);
       });
     } else {
-      promise = Promise.resolve(void);
+      promise = Promise.resolve(void 0);
     }
     // Emit the other signals after we have handled the kernel.
     return promise.then(() => {
@@ -443,7 +431,7 @@ class DefaultSession implements Session.IWritableSession {
       path: this._path,
       name: this._name,
       type: this._type,
-      kernel
+      kernel,
     };
     return Private.startSession(model);
   }
@@ -492,6 +480,7 @@ class DefaultSession implements Session.IWritableSession {
   private _options: Session.IOptions = null;
   private _updating = false;
   private _changed = new Signal<this, keyof Session.ISession>(this);
+  private _terminated = new Signal<this, void>(this);
   private _iopubMessage = new Signal<this, KernelMessage.IMessage>(this);
   private _unhandledMessage = new Signal<this, KernelMessage.IMessage>(this);
 }
@@ -540,22 +529,14 @@ namespace DefaultSession {
    */
   export
   function connectTo(path: string, options?: Session.IOptions): Promise<Session.ISession> {
-    return findByPath(path).then(model => {
-      if (!model) {
-        let msg = `Could not connect to ${path}`;
-        return Promise.reject(new Error(msg));
-      }
-      let session = new DefaultSession(options);
-      session.update(model);
-      return session;
-    });
+    return Private.connectTo(path, options);
   }
 
   /**
    * Shut down a session by path.
    */
   export
-  function shutdown(path: string, options: Session.IOptions = {}): Promise<void> {
+  function shutdown(path: string, options: Session.IOptions): Promise<void> {
     return Private.shutdown(path, options);
   }
 }
@@ -575,7 +556,7 @@ namespace Private {
    * List the running sessions.
    */
   export
-  function listRunning(options: Session.IOptions = {}): Promise<Session.IModel[]> {
+  function listRunning(options: Partial<Session.IOptions> = {}): Promise<Session.IModel[]> {
     let baseUrl = options.baseUrl || utils.getBaseUrl();
     let url = utils.urlPathJoin(baseUrl, SESSION_SERVICE_URL);
     let ajaxSettings = utils.ajaxSettingsWithToken(options.ajaxSettings, options.token);
@@ -603,23 +584,10 @@ namespace Private {
   }
 
   /**
-   * Start a new session.
-   */
-  export
-  function startNew(options: Session.IOptions): Promise<Session.ISession> {
-    if (options.path === void 0) {
-      return Promise.reject(new Error('Must specify a path'));
-    }
-    return startSession(options).then(model => {
-      return createSession(model, options);
-    });
-  }
-
-  /**
    * Find a session by id.
    */
   export
-  function findById(id: string, options: Session.IOptions = {}): Promise<Session.IModel> {
+  function findById(id: string, options: Partial<Session.IOptions> = {}): Promise<Session.IModel> {
     let session = find(runningSessions, value => value.id === id);
     if (session) {
       return Promise.resolve(session.model);
@@ -643,7 +611,7 @@ namespace Private {
 
     return listRunning(options).then(models => {
       let model = find(models, value => {
-        return value.notebook.path === path;
+        return value.path === path;
       });
       if (model) {
         return model;
@@ -657,17 +625,19 @@ namespace Private {
    * Connect to a running session.
    */
   export
-  function connectTo(id: string, options: Session.IOptions = {}): Promise<Session.ISession> {
-    let session = find(runningSessions, value => value.id === id);
+  function connectTo(path: string, options: Session.IOptions = {}): Promise<Session.ISession> {
+    let session = find(runningSessions, value => value.path === path);
     if (session) {
-      return Promise.resolve(session.clone());
+      return Promise.resolve(session);
     }
-
-    return getSessionModel(id, options).then(model => {
-      return createSession(model, options);
-    }).catch(() => {
-      let msg = `No running session with id: ${id}`;
-      return typedThrow<Session.ISession>(msg);
+    return findByPath(path).then(model => {
+      if (!model) {
+        let msg = `Could not connect to ${path}`;
+        return Promise.reject(new Error(msg));
+      }
+      let session = new DefaultSession(options);
+      session.update(model);
+      return session;
     });
   }
 
@@ -691,13 +661,9 @@ namespace Private {
    * the session path already exists
    */
   export
-  function startSession(options: Session.IOptions): Promise<Session.IModel> {
+  function startSession(model: Partial<Session.IModel>): Promise<Session.IModel> {
     let baseUrl = options.baseUrl || utils.getBaseUrl();
     let url = utils.urlPathJoin(baseUrl, SESSION_SERVICE_URL);
-    let model = {
-      kernel: { name: options.kernelName, id: options.kernelId },
-      notebook: { path: options.path }
-    };
     let ajaxSettings: IAjaxSettings = utils.ajaxSettingsWithToken(options.ajaxSettings, options.token);
     ajaxSettings.method = 'POST';
     ajaxSettings.dataType = 'json';
@@ -717,39 +683,6 @@ namespace Private {
       let data = success.data as Session.IModel;
       return updateFromServer(data);
     }, onSessionError);
-  }
-
-  /**
-   * Create a Promise for a kernel object given a session model and options.
-   */
-  function createKernel(options: Session.IOptions): Promise<Kernel.IKernel> {
-    let kernelOptions: Kernel.IOptions = {
-      name: options.kernelName,
-      baseUrl: options.baseUrl || utils.getBaseUrl(),
-      wsUrl: options.wsUrl,
-      username: options.username,
-      clientId: options.clientId,
-      token: options.token,
-      ajaxSettings: options.ajaxSettings
-    };
-    return Kernel.connectTo(options.kernelId, kernelOptions);
-  }
-
-  /**
-   * Create a Session object.
-   *
-   * @returns - A promise that resolves with a started session.
-   */
-  export
-  function createSession(model: Session.IModel, options: Session.IOptions): Promise<DefaultSession> {
-    options.kernelName = model.kernel.name;
-    options.kernelId = model.kernel.id;
-    options.path = model.notebook.path;
-    return createKernel(options).then(kernel => {
-      return new DefaultSession(options, model.id, kernel);
-    }).catch(error => {
-      return typedThrow('Session failed to start: ' + error.message);
-    });
   }
 
   /**

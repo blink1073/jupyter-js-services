@@ -150,6 +150,16 @@ namespace Session {
     defaultKernelName: string;
 
     /**
+     * Get a server setting.
+     */
+    getServerSetting(key: K extends keyof IServerSettings): IServerSettings[K];
+
+    /**
+     * Set a server setting.
+     */
+    setServerSetting(key: K extends keyof IServerSettings, value: IServerSettings[K]): void;
+
+    /**
      * Set the path of the session.
      */
     setPath(path: string): Promise<void>;
@@ -180,7 +190,7 @@ namespace Session {
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
   export
-  function listRunning(options?: Session.IOptions): Promise<Session.IModel[]> {
+  function listRunning(options?: IServerSettings): Promise<Session.IModel[]> {
     return DefaultSession.listRunning(options);
   }
 
@@ -205,7 +215,7 @@ namespace Session {
    * rejected.
    */
   export
-  function startNew(options: Session.IOptions): Promise<IWritableSession> {
+  function startNew(options: IOptions): Promise<IWritableSession> {
     return DefaultSession.startNew(options);
   }
 
@@ -228,7 +238,7 @@ namespace Session {
    * otherwise the promise is rejected.
    */
   export
-  function findById(id: string, options?: Session.IOptions): Promise<Session.IModel> {
+  function findById(id: string, settings?: IServerSettings): Promise<IModel> {
     return DefaultSession.findById(id, options);
   }
 
@@ -254,7 +264,7 @@ namespace Session {
    * the promise is rejected.
    */
   export
-  function findByPath(path: string, options?: Session.IOptions): Promise<Session.IModel> {
+  function findByPath(path: string, settings?: IServerSettings): Promise<IModel> {
     return DefaultSession.findByPath(path, options);
   }
 
@@ -280,7 +290,7 @@ namespace Session {
    * the promise is rejected.
    */
   export
-  function connectTo(path: string, options?: Session.IOptions): Promise<IWritableSession> {
+  function connectTo(path: string, options?: Session.IServerSettings): Promise<IWritableSession> {
     return DefaultSession.connectTo(path, options);
   }
 
@@ -295,15 +305,53 @@ namespace Session {
    *
    */
   export
-  function shutdown(path: string, options: Session.IOptions = {}): Promise<void> {
+  function shutdown(path: string, options: Session.IServerSettings = {}): Promise<void> {
     return DefaultSession.shutdown(path, options);
+  }
+
+  /**
+   * Server settings.
+   */
+  export
+  interface IServerSettings extends JSONObject {
+    /**
+     * The root url of the server.
+     */
+    baseUrl: string;
+
+    /**
+     * The url to access websockets.
+     */
+    wsUrl: string;
+
+    /**
+     * The token used for API requests.
+     */
+    token: string;
+
+    /**
+     * Is a Boolean that indicates whether or not cross-site Access-Control
+     * requests should be made using credentials such as cookies or
+     * authorization headers.  Defaults to `false`.
+     */
+    withCredentials: boolean;
+
+    /**
+     * The user name for the server with the request.  Defaults to `''`.
+     */
+    user: string;
+
+    /**
+     * The password for the server.  Defaults to `''`.
+     */
+    password: string;
   }
 
   /**
    * The session initialization options.
    */
   export
-  interface IOptions extends JSONObject {
+  interface IOptions {
     /**
      * The path (not including name) to the session.
      */
@@ -312,7 +360,7 @@ namespace Session {
     /**
      * The name of the default kernel.
      */
-    defaultKernelName: string;
+    defaultKernelName?: string;
 
     /**
      * The name of the session.
@@ -325,16 +373,6 @@ namespace Session {
     type?: string;
 
     /**
-     * The root url of the server.
-     */
-    baseUrl?: string;
-
-    /**
-     * The url to access websockets.
-     */
-    wsUrl?: string;
-
-    /**
      * The username of the session client.
      */
     username?: string;
@@ -345,14 +383,9 @@ namespace Session {
     clientId?: string;
 
     /**
-     * The authentication token for the API.
+     * The server settings.
      */
-    token?: string;
-
-    /**
-     * The default ajax settings to use for the session.
-     */
-    ajaxSettings?: IAjaxSettings;
+    serverSettings?: IServerSettings;
   }
 
   /**
@@ -375,19 +408,14 @@ namespace Session {
     runningChanged: ISignal<IManager, IModel[]>;
 
     /**
-     * The base url of the manager.
+     * Get a server setting.
      */
-    readonly baseUrl: string;
+    getServerSetting(key: K extends keyof IServerSettings): IServerSettings[K];
 
     /**
-     * The base ws url of the manager.
+     * Set a server setting.
      */
-    readonly wsUrl: string;
-
-    /**
-     * The default ajax settings for the manager.
-     */
-    ajaxSettings?: IAjaxSettings;
+    setServerSetting(key: K extends keyof IServerSettings, value: IServerSettings[K]): void;
 
     /**
      * The cached kernel specs.
@@ -454,13 +482,8 @@ namespace Session {
      * @param options - The session options to use.
      *
      * @returns A promise that resolves with the new session instance.
-     *
-     * #### Notes
-     * If options are given, the baseUrl and wsUrl will be forced
-     * to the ones used by the manager.  The ajaxSettings of the manager
-     * will be used unless overridden.
      */
-    connectTo(path: string, options?: IOptions): Promise<IWritableSession>;
+    connectTo(path: string): Promise<IWritableSession>;
 
     /**
      * Shut down a session by path.
@@ -509,6 +532,6 @@ namespace Session {
     readonly path: string;
     readonly name: string;
     readonly type: string;
-    readonly kernel?: Kernel.IModel;
+    readonly kernel: Partial<Kernel.IModel>;
   }
 }
