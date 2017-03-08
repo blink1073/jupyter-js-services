@@ -32,48 +32,49 @@ import {
 
 /**
  * A namespace for session interfaces and factory functions.
+ *
+ * #### Notes
+ * The client side session has a different lifecycle than
+ * the server side session.  A client side session does not
+ * require an active kernel, and persists for the life of the
+ * given path.
  */
 export
 namespace Session {
   /**
-   * Interface of a session object.
+   * Interface of for a client session object.
    */
   export
   interface ISession extends IDisposable {
     /**
      * A signal emitted when the session is shut down.
      */
-    terminated: ISignal<ISession, void>;
+    readonly terminated: ISignal<this, void>;
 
     /**
      * A signal emitted when the kernel changes.
      */
-    kernelChanged: ISignal<ISession, Kernel.IKernel>;
+    readonly kernelChanged: ISignal<this, Kernel.IKernel>;
 
     /**
      * A signal emitted when the session status changes.
      */
-    statusChanged: ISignal<ISession, Kernel.Status>;
+    readonly statusChanged: ISignal<this, Kernel.Status>;
 
     /**
      * A signal emitted when the session path changes.
      */
-    pathChanged: ISignal<ISession, string>;
+    readonly pathChanged: ISignal<this, string>;
 
     /**
      * A signal emitted for iopub kernel messages.
      */
-    iopubMessage: ISignal<ISession, KernelMessage.IIOPubMessage>;
+    readonly iopubMessage: ISignal<this, KernelMessage.IIOPubMessage>;
 
     /**
      * A signal emitted for unhandled kernel message.
      */
-    unhandledMessage: ISignal<ISession, KernelMessage.IMessage>;
-
-    /**
-     * Unique id of the session.
-     */
-    readonly id: string;
+    readonly unhandledMessage: ISignal<this, KernelMessage.IMessage>;
 
     /**
      * The path associated with the session.
@@ -81,14 +82,14 @@ namespace Session {
     readonly path: string;
 
     /**
-     * The base url of the session.
+     * The name of the session.
      */
-    readonly baseUrl: string;
+    readonly name: string;
 
     /**
-     * The model associated with the session.
+     * The type of the session.
      */
-    readonly model: Session.IModel;
+    readonly type: string;
 
     /**
      * The kernel.
@@ -109,38 +110,21 @@ namespace Session {
     readonly status: Kernel.Status;
 
     /**
-     * Optional default settings for ajax requests, if applicable.
-     */
-    ajaxSettings?: IAjaxSettings;
-
-    /**
-     * Change the session path.
+     * Start a kernel.
      *
-     * @param path - The new session path.
+     * @param options - The name or id of the new kernel.  Defaults
+     *   to the default kernel for the session.
      *
-     * @returns A promise that resolves when the session has renamed.
-     *
-     * #### Notes
-     * This uses the Jupyter REST API, and the response is validated.
-     * The promise is fulfilled on a valid response and rejected otherwise.
-     */
-    rename(path: string): Promise<void>;
-
-    /**
-     * Change the kernel.
-     *
-     * @param options - The name or id of the new kernel.
-     *
-     * @returns A promise that resolves with the new kernel model.
+     * @returns A promise that resolves with the new kernel object.
      *
      * #### Notes
      * This shuts down the existing kernel and creates a new kernel,
      * keeping the existing session ID and path.
      */
-    changeKernel(options: Kernel.IModel): Promise<Kernel.IKernel>;
+    startKernel(options?: Kernel.IModel): Promise<Kernel.IKernel>;
 
     /**
-     * Kill the kernel and shutdown the session.
+     * Kill the kernel and shutdown the server session.
      *
      * @returns A promise that resolves when the session is shut down.
      *
@@ -149,6 +133,37 @@ namespace Session {
      * The promise is fulfilled on a valid response and rejected otherwise.
      */
     shutdown(): Promise<void>;
+  }
+
+  /**
+   * An interface for a session that has writable attributes.
+   */
+  export
+  interface IWritableSession extends ISession {
+    /**
+     * The id of the current server side session.
+     */
+    id: string | null;
+
+    /**
+     * The name of the default kernel.
+     */
+    defaultKernelName: string;
+
+    /**
+     * Change the path of the session.
+     */
+    changePath(): Promise<void>;
+
+    /**
+     * Change the name of the session.
+     */
+    changeName(): Promise<void>;
+
+    /**
+     * Change the type of the session.
+     */
+    changeType(): Promise<void>;
   }
 
   /**
@@ -191,7 +206,7 @@ namespace Session {
    * rejected.
    */
   export
-  function startNew(options: Session.IOptions): Promise<ISession> {
+  function startNew(options: Session.IOptions): Promise<IWritableSession> {
     return DefaultSession.startNew(options);
   }
 
@@ -266,14 +281,14 @@ namespace Session {
    * the promise is rejected.
    */
   export
-  function connectTo(id: string, options?: Session.IOptions): Promise<ISession> {
+  function connectTo(id: string, options?: Session.IOptions): Promise<IWritableSession> {
     return DefaultSession.connectTo(id, options);
   }
 
   /**
-   * Shut down a session by id.
+   * Shut down a session by path.
    *
-   * @param id - The id of the target session.
+   * @param path - The path of the target session.
    *
    * @param options - The options used to fetch the session.
    *
@@ -281,8 +296,8 @@ namespace Session {
    *
    */
   export
-  function shutdown(id: string, options: Session.IOptions = {}): Promise<void> {
-    return DefaultSession.shutdown(id, options);
+  function shutdown(path: string, options: Session.IOptions = {}): Promise<void> {
+    return DefaultSession.shutdown(path, options);
   }
 
   /**
@@ -293,7 +308,17 @@ namespace Session {
     /**
      * The path (not including name) to the session.
      */
-    path?: string;
+    path: string;
+
+    /**
+     * The name of the session.
+     */
+    name?: string;
+
+    /**
+     * The type of the session.
+     */
+    type?: string;
 
     /**
      * The type of kernel (e.g. python3).
@@ -407,7 +432,7 @@ namespace Session {
      * to the ones used by the manager. The ajaxSettings of the manager
      * will be used unless overridden.
      */
-    startNew(options: IOptions): Promise<ISession>;
+    startNew(options: IOptions): Promise<IWritableSession>;
 
     /**
      * Find a session by id.
@@ -441,16 +466,16 @@ namespace Session {
      * to the ones used by the manager.  The ajaxSettings of the manager
      * will be used unless overridden.
      */
-    connectTo(id: string, options?: IOptions): Promise<ISession>;
+    connectTo(id: string, options?: IOptions): Promise<IWritableSession>;
 
     /**
-     * Shut down a session by id.
+     * Shut down a session by path.
      *
-     * @param id - The id of the target kernel.
+     * @param path - The path of the target session.
      *
      * @returns A promise that resolves when the operation is complete.
      */
-    shutdown(id: string): Promise<void>;
+    shutdown(path: string): Promise<void>;
 
     /**
      * Force a refresh of the specs from the server.

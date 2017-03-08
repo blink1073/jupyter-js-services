@@ -40,11 +40,11 @@ const SESSION_SERVICE_URL = 'api/sessions';
  * all other operations, the kernel object should be used.
  */
 export
-class DefaultSession implements Session.ISession {
+class DefaultSession implements Session.IWritableSession {
   /**
    * Construct a new session.
    */
-  constructor(options: Session.IOptions, id: string, kernel: Kernel.IKernel) {
+  constructor(options: Session.IOptions, kernel: Kernel.IKernel) {
     this._id = id;
     this._path = options.path;
     this._baseUrl = options.baseUrl || utils.getBaseUrl();
@@ -422,11 +422,11 @@ namespace DefaultSession {
   }
 
   /**
-   * Shut down a session by id.
+   * Shut down a session by path.
    */
   export
-  function shutdown(id: string, options: Session.IOptions = {}): Promise<void> {
-    return Private.shutdown(id, options);
+  function shutdown(path: string, options: Session.IOptions = {}): Promise<void> {
+    return Private.shutdown(path, options);
   }
 }
 
@@ -542,13 +542,18 @@ namespace Private {
   }
 
   /**
-   * Shut down a session by id.
+   * Shut down a session by path.
    */
   export
-  function shutdown(id: string, options: Session.IOptions = {}): Promise<void> {
+  function shutdown(path: string, options: Session.IOptions = {}): Promise<void> {
     let baseUrl = options.baseUrl || utils.getBaseUrl();
     let ajaxSettings = utils.ajaxSettingsWithToken(options.ajaxSettings, options.token);
-    return shutdownSession(id, baseUrl, ajaxSettings);
+    return findByPath(path, options).then(model => {
+      if (!model) {
+        return Promise.reject('Not found');
+      }
+      return shutdownSession(model.id, baseUrl, ajaxSettings);
+    });
   }
 
   /**
