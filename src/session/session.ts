@@ -38,6 +38,10 @@ import {
  * the server side session.  A client side session does not
  * require an active kernel, and persists for the life of the
  * given path.
+ * Consumers should connect to `iopubMessage` and `unhandledMessage`
+ * on the session to avoid having to reconnect when the kernel changes.
+ * Consumers should *not* call shutdown on the kernel itself, as that
+ * is considered an error on the server.  Call shutdown on the session.
  */
 export
 namespace Session {
@@ -52,19 +56,9 @@ namespace Session {
     readonly terminated: ISignal<this, void>;
 
     /**
-     * A signal emitted when the kernel changes.
+     * A signal emitted when a session property changes.
      */
-    readonly kernelChanged: ISignal<this, Kernel.IKernel>;
-
-    /**
-     * A signal emitted when the session status changes.
-     */
-    readonly statusChanged: ISignal<this, Kernel.Status>;
-
-    /**
-     * A signal emitted when the session path changes.
-     */
-    readonly pathChanged: ISignal<this, string>;
+    readonly changed: ISignal<this, keyof ISession>;
 
     /**
      * A signal emitted for iopub kernel messages.
@@ -90,6 +84,11 @@ namespace Session {
      * The type of the session.
      */
     readonly type: string;
+
+    /**
+     * The name of the default kernel.
+     */
+    defaultKernelName: string;
 
     /**
      * The kernel.
@@ -143,7 +142,7 @@ namespace Session {
     /**
      * The id of the current server side session.
      */
-    id: string | null;
+    readonly id: string | null;
 
     /**
      * The name of the default kernel.
@@ -151,19 +150,19 @@ namespace Session {
     defaultKernelName: string;
 
     /**
-     * Change the path of the session.
+     * Set the path of the session.
      */
-    changePath(): Promise<void>;
+    setPath(path: string): Promise<void>;
 
     /**
-     * Change the name of the session.
+     * Set the name of the session.
      */
-    changeName(): Promise<void>;
+    setName(name: string): Promise<void>;
 
     /**
-     * Change the type of the session.
+     * Set the type of the session.
      */
-    changeType(): Promise<void>;
+    setType(type: string): Promise<void>;
   }
 
   /**
@@ -262,7 +261,7 @@ namespace Session {
   /**
    * Connect to a running session.
    *
-   * @param id - The id of the target session.
+   * @param path - The path of the target session.
    *
    * @param options - The options used to fetch the session.
    *
@@ -281,8 +280,8 @@ namespace Session {
    * the promise is rejected.
    */
   export
-  function connectTo(id: string, options?: Session.IOptions): Promise<IWritableSession> {
-    return DefaultSession.connectTo(id, options);
+  function connectTo(path: string, options?: Session.IOptions): Promise<IWritableSession> {
+    return DefaultSession.connectTo(path, options);
   }
 
   /**
@@ -324,16 +323,6 @@ namespace Session {
      * The type of the session.
      */
     type?: string;
-
-    /**
-     * The type of kernel (e.g. python3).
-     */
-    kernelName?: string;
-
-    /**
-     * The id of an existing kernel.
-     */
-    kernelId?: string;
 
     /**
      * The root url of the server.
@@ -460,7 +449,7 @@ namespace Session {
     /**
      * Connect to a running session.
      *
-     * @param id - The id of the target session.
+     * @param path - The path of the target session.
      *
      * @param options - The session options to use.
      *
@@ -471,7 +460,7 @@ namespace Session {
      * to the ones used by the manager.  The ajaxSettings of the manager
      * will be used unless overridden.
      */
-    connectTo(id: string, options?: IOptions): Promise<IWritableSession>;
+    connectTo(path: string, options?: IOptions): Promise<IWritableSession>;
 
     /**
      * Shut down a session by path.
@@ -517,10 +506,9 @@ namespace Session {
      * The unique identifier for the session client.
      */
     readonly id: string;
-    readonly notebook?: {
-      [ key: string ]: string;
-      path: string;
-    };
+    readonly path: string;
+    readonly name: string;
+    readonly type: string;
     readonly kernel?: Kernel.IModel;
   }
 }

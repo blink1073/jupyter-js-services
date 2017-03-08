@@ -183,7 +183,7 @@ class SessionManager implements Session.IManager {
    * @param options - Overrides for the default options, must include a
    *   `'path'`.
    */
-  startNew(options: Session.IOptions): Promise<Session.ISession> {
+  startNew(options: Session.IOptions): Promise<Session.IWritableSession> {
     return Session.startNew(this._getOptions(options)).then(session => {
       this._onStarted(session);
       return session;
@@ -207,8 +207,8 @@ class SessionManager implements Session.IManager {
   /*
    * Connect to a running session.  See also [[connectToSession]].
    */
-  connectTo(id: string, options?: Session.IOptions): Promise<Session.ISession> {
-    return Session.connectTo(id, this._getOptions(options)).then(session => {
+  connectTo(path: string, options?: Session.IOptions): Promise<Session.IWritableSession> {
+    return Session.connectTo(path, this._getOptions(options)).then(session => {
       this._onStarted(session);
       return session;
     });

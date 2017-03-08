@@ -44,8 +44,7 @@ class DefaultSession implements Session.IWritableSession {
   /**
    * Construct a new session.
    */
-  constructor(options: Session.IOptions, kernel: Kernel.IKernel | null) {
-    this._id = id;
+  constructor(options: Session.IOptions) {
     this._path = options.path;
     this._baseUrl = options.baseUrl || utils.getBaseUrl();
     this._uuid = utils.uuid();
@@ -54,28 +53,21 @@ class DefaultSession implements Session.IWritableSession {
     );
     this._token = options.token || utils.getConfigOption('token');
     Private.runningSessions.push(this);
-    this.setupKernel(kernel);
-    this._options = utils.copy(options);
-    this.terminated = new Signal<this, void>(this);
+    this._options = {...options};
   }
 
   /**
    * A signal emitted when the session is shut down.
    */
-  readonly terminated: Signal<this, void>;
+  get terminated(): ISignal<this, void> {
+    return this._terminated;
+  }
 
   /**
    * A signal emitted when the kernel changes.
    */
-  get kernelChanged(): ISignal<this, Kernel.IKernel> {
-    return this._kernelChanged;
-  }
-
-  /**
-   * A signal emitted when the kernel status changes.
-   */
-  get statusChanged(): ISignal<this, Kernel.Status> {
-    return this._statusChanged;
+  get changed(): ISignal<this, keyof Session.ISession> {
+    return this._changed;
   }
 
   /**
@@ -90,13 +82,6 @@ class DefaultSession implements Session.IWritableSession {
    */
   get unhandledMessage(): ISignal<this, KernelMessage.IMessage> {
     return this._unhandledMessage;
-  }
-
-  /**
-   * A signal emitted when the session path changes.
-   */
-  get pathChanged(): ISignal<this, string> {
-    return this._pathChanged;
   }
 
   /**
@@ -205,45 +190,6 @@ class DefaultSession implements Session.IWritableSession {
   }
 
   /**
-   * Clone the current session with a new clientId.
-   */
-  clone(): Promise<Session.ISession> {
-    let options = this._getKernelOptions();
-    return Kernel.connectTo(this.kernel.id, options).then(kernel => {
-      options = utils.copy(this._options);
-      options.ajaxSettings = this.ajaxSettings;
-      return new DefaultSession(options, this._id, kernel);
-    });
-  }
-
-  /**
-   * Update the session based on a session model from the server.
-   */
-  update(model: Session.IModel): Promise<void> {
-    // Avoid a race condition if we are waiting for a REST call return.
-    if (this._updating) {
-      return Promise.resolve(void 0);
-    }
-    let oldPath = this._path;
-    let newPath = this._path = model.notebook.path;
-
-    if (this._kernel.isDisposed || model.kernel.id !== this._kernel.id) {
-      let options = this._getKernelOptions();
-      options.name = model.kernel.name;
-      return Kernel.connectTo(model.kernel.id, options).then(kernel => {
-        this.setupKernel(kernel);
-        this._kernelChanged.emit(kernel);
-        if (oldPath !== newPath) {
-          this._pathChanged.emit(newPath);
-        }
-      });
-    } else if (oldPath !== newPath) {
-      this._pathChanged.emit(newPath);
-    }
-    return Promise.resolve(void 0);
-  }
-
-  /**
    * Dispose of the resources held by the session.
    */
   dispose(): void {
@@ -260,6 +206,58 @@ class DefaultSession implements Session.IWritableSession {
   }
 
   /**
+   * Clone the current session with a new clientId.
+   */
+  clone(): Promise<Session.ISession> {
+    let options = this._getKernelOptions();
+    return Kernel.connectTo(this.kernel.id, options).then(kernel => {
+      options = utils.copy(this._options);
+      options.ajaxSettings = this.ajaxSettings;
+      return new DefaultSession(options, this._id);
+    });
+  }
+
+  /**
+   * Update the session based on a session model from the server.
+   */
+  update(model: Session.IModel): Promise<void> {
+    // Avoid a race condition if we are waiting for a REST call return.
+    if (this._updating) {
+      return Promise.resolve(void 0);
+    }
+    this._id = model.id;
+    let oldModel = this.model;
+    this._path = model.path;
+    this._type = model.type;
+    this._name = model.name;
+
+    // Start a client kernel session if necessary.
+    let deadKernel = this._kernel && this._kernel.isDisposed;
+    let promise: Promise<void>;
+    if (deadKernel || model.kernel.id !== oldModel.kernel.id) {
+      let options = this._getKernelOptions();
+      options.name = model.kernel.name;
+      promise = Kernel.connectTo(model.kernel.id, options).then(kernel => {
+        this.setupKernel(kernel);
+      });
+    } else {
+      promise = Promise.resolve(void);
+    }
+    // Emit the other signals after we have handled the kernel.
+    return promise.then(() => {
+      if (oldModel.path !== this._path) {
+        this._changed.emit('path');
+      }
+      if (oldModel.name !== this._name) {
+        this._changed.emit('name');
+      }
+      if (oldModel.type !== this._type) {
+        this._changed.emit('type');
+      }
+    });
+  }
+
+  /**
    * Change the session path.
    *
    * @param path - The new session path.
@@ -269,8 +267,16 @@ class DefaultSession implements Session.IWritableSession {
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
   setPath(path: string): Promise<void> {
+    if (this._path === path) {
+      return Promise.resolve(void 0);
+    }
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
+    }
+    this._path = path;
+    this._changed.emit('path');
+    if (!this._id) {
+      return Promise.resolve(void 0);
     }
     let data = JSON.stringify({ path });
     return this._patch(data).then(() => { return void 0; });
@@ -287,8 +293,16 @@ class DefaultSession implements Session.IWritableSession {
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
   setName(name: string): Promise<void> {
+    if (this._name === name) {
+      return Promise.resolve(void 0);
+    }
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
+    }
+    this._name = name;
+    this._changed.emit('name');
+    if (!this._id) {
+      return Promise.resolve(void 0);
     }
     let data = JSON.stringify({ name });
     return this._patch(data).then(() => { return void 0; });
@@ -304,10 +318,18 @@ class DefaultSession implements Session.IWritableSession {
    * The promise is fulfilled on a valid response and rejected otherwise.
    */
   setType(type: string): Promise<void> {
+    if (this._type === type) {
+      return Promise.resolve(void 0);
+    }
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
     }
     let data = JSON.stringify({ type });
+    this._type = type;
+    this._changed.emit('type');
+    if (!this._id) {
+      return Promise.resolve(void 0);
+    }
     return this._patch(data).then(() => { return void 0; });
   }
 
@@ -331,10 +353,20 @@ class DefaultSession implements Session.IWritableSession {
       this._kernel.dispose();
     }
     if (options === void 0) {
-      options = { name: this._defaultKernelName };
+      if (this._defaultKernelName) {
+        options = { name: this._defaultKernelName };
+      } else {
+        options = {};
+      }
     }
-    let data = JSON.stringify({ kernel: options });
-    return this._patch(data).then(() => {
+    let promise: Promise<Session.IModel>;
+    if (!this._id) {
+      promise = this._createServerSession(options);
+    } else {
+      let data = JSON.stringify({ kernel: options });
+      promise = this._patch(data);
+    }
+    return promise.then(() => {
       return this.kernel;
     });
   }
@@ -352,7 +384,9 @@ class DefaultSession implements Session.IWritableSession {
     if (this.isDisposed) {
       return Promise.reject(new Error('Session is disposed'));
     }
-    return Private.shutdownSession(this.id, this._baseUrl, this.ajaxSettings);
+    let id = this._id;
+    this._id = null;
+    return Private.shutdownSession(id, this._baseUrl, this.ajaxSettings);
   }
 
   /**
@@ -360,19 +394,19 @@ class DefaultSession implements Session.IWritableSession {
    */
   protected setupKernel(kernel: Kernel.IKernel | null): void {
     this._kernel = kernel;
-    if (!kernel) {
-      return;
+    if (kernel) {
+      kernel.statusChanged.connect(this.onKernelStatus, this);
+      kernel.unhandledMessage.connect(this.onUnhandledMessage, this);
+      kernel.iopubMessage.connect(this.onIOPubMessage, this);
     }
-    kernel.statusChanged.connect(this.onKernelStatus, this);
-    kernel.unhandledMessage.connect(this.onUnhandledMessage, this);
-    kernel.iopubMessage.connect(this.onIOPubMessage, this);
+    this._changed.emit('kernel');
   }
 
   /**
    * Handle to changes in the Kernel status.
    */
-  protected onKernelStatus(sender: Kernel.IKernel, state: Kernel.Status) {
-    this._statusChanged.emit(state);
+  protected onKernelStatus() {
+    this._changed.emit('status');
   }
 
   /**
@@ -399,6 +433,19 @@ class DefaultSession implements Session.IWritableSession {
       username: this.kernel.username,
       ajaxSettings: this.ajaxSettings
     };
+  }
+
+  /**
+   * Create a server session for the client session.
+   */
+  private _createServerSession(kernel: Kernel.IModel): Promise<Session.IModel> {
+    let model = {
+      path: this._path,
+      name: this._name,
+      type: this._type,
+      kernel
+    };
+    return Private.startSession(model);
   }
 
   /**
@@ -432,7 +479,7 @@ class DefaultSession implements Session.IWritableSession {
     });
   }
 
-  private _id = '';
+  private _id: string | null = null;
   private _path = '';
   private _name = '';
   private _type = '';
@@ -441,13 +488,12 @@ class DefaultSession implements Session.IWritableSession {
   private _kernel: Kernel.IKernel | null = null;
   private _uuid = '';
   private _baseUrl = '';
+  private _defaultKernelName = '';
   private _options: Session.IOptions = null;
   private _updating = false;
-  private _kernelChanged = new Signal<this, Kernel.IKernel>(this);
-  private _statusChanged = new Signal<this, Kernel.Status>(this);
+  private _changed = new Signal<this, keyof Session.ISession>(this);
   private _iopubMessage = new Signal<this, KernelMessage.IMessage>(this);
   private _unhandledMessage = new Signal<this, KernelMessage.IMessage>(this);
-  private _pathChanged = new Signal<this, string>(this);
 }
 
 /**
@@ -468,7 +514,9 @@ namespace DefaultSession {
    */
   export
   function startNew(options: Session.IOptions): Promise<Session.ISession> {
-    return Private.startNew(options);
+    return connectTo(options.path, options).catch(() => {
+      return new DefaultSession(options);
+    });
   }
 
   /**
@@ -491,8 +539,16 @@ namespace DefaultSession {
    * Connect to a running session.
    */
   export
-  function connectTo(id: string, options?: Session.IOptions): Promise<Session.ISession> {
-    return Private.connectTo(id, options);
+  function connectTo(path: string, options?: Session.IOptions): Promise<Session.ISession> {
+    return findByPath(path).then(model => {
+      if (!model) {
+        let msg = `Could not connect to ${path}`;
+        return Promise.reject(new Error(msg));
+      }
+      let session = new DefaultSession(options);
+      session.update(model);
+      return session;
+    });
   }
 
   /**
@@ -732,7 +788,7 @@ namespace Private {
 
     each(runningSessions, session => {
       let updated = find(sessions, sId => {
-        if (session.id === sId.id) {
+        if (session.path === sId.path) {
           promises.push(session.update(sId));
           return true;
         }
@@ -752,7 +808,7 @@ namespace Private {
   function updateFromServer(model: Session.IModel): Promise<Session.IModel> {
     let promises: Promise<void>[] = [];
     each(runningSessions, session => {
-      if (session.id === model.id) {
+      if (session.path === model.path) {
         promises.push(session.update(model));
       }
     });
