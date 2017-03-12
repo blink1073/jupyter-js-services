@@ -397,6 +397,12 @@ namespace Kernel {
   }
 
   /**
+   * A managed kernel interface.
+   */
+  export
+  interface IManagedKernel extends IKernel {}
+
+  /**
    * Find a kernel by id.
    *
    * #### Notes

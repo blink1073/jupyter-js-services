@@ -2,10 +2,6 @@
 // Distributed under the terms of the Modified BSD License.
 
 import {
-  JSONObject
-} from '@phosphor/coreutils';
-
-import {
   IDisposable
 } from '@phosphor/disposable';
 
@@ -30,8 +26,12 @@ import {
 } from './terminal';
 
 import {
-  IAjaxSettings, getBaseUrl, getWsUrl, ajaxSettingsWithToken
+  getBaseUrl, getWsUrl, ajaxSettingsWithToken
 } from './utils';
+
+import {
+  IServerOptions
+} from './';
 
 
 /**
@@ -201,25 +201,5 @@ namespace ServiceManager {
    * The options used to create a service manager.
    */
   export
-  interface IOptions extends JSONObject {
-    /**
-     * The base url of the server.
-     */
-    baseUrl?: string;
-
-    /**
-     * The base ws url of the server.
-     */
-    wsUrl?: string;
-
-    /**
-     * The authentication token for the API.
-     */
-    token?: string;
-
-    /**
-     * The ajax settings for the manager.
-     */
-    ajaxSettings?: IAjaxSettings;
-  }
+  interface IOptions extends IServerOptions;
 }
