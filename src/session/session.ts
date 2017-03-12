@@ -14,16 +14,16 @@ import {
 } from '@phosphor/signaling';
 
 import {
-  IServerOptions
-} from '../';
-
-import {
   Kernel, KernelMessage
 } from '../kernel';
 
 import {
   DefaultSession
 } from './default';
+
+import {
+  IServerOptions
+} from '../utils';
 
 
 /**
@@ -98,9 +98,6 @@ namespace Session {
 
     /**
      * The current status of the session.
-     *
-     * #### Notes
-     * This is a delegate to the kernel status.
      */
     readonly status: Kernel.Status;
 
@@ -148,12 +145,17 @@ namespace Session {
     /**
      * The server settings
      */
-    readonly serverSettings: IServerOptions;
+    readonly serverOptions: IServerOptions;
 
     /**
      * The managed kernel instance.
      */
     readonly kernel: Kernel.IManagedKernel;
+
+    /**
+     * The session model.
+     */
+    readonly model: Session.IModel;
 
     /**
      * Set the path of the session.
@@ -309,7 +311,7 @@ namespace Session {
    * The session initialization options.
    */
   export
-  interface IOptions {
+  interface IOptions extends JSONObject {
     /**
      * The path (not including name) to the session.
      */
@@ -343,7 +345,7 @@ namespace Session {
     /**
      * The server settings.
      */
-    serverSettings?: Partial<IServerOptions>;
+    serverOptions?: Partial<IServerOptions>;
   }
 
   /**
@@ -368,7 +370,7 @@ namespace Session {
     /**
      * The server settings
      */
-    readonly serverSettings: IServerOptions;
+    readonly serverOptions: IServerOptions;
 
     /**
      * The cached kernel specs.
@@ -479,7 +481,7 @@ namespace Session {
     /**
      * The unique identifier for the session client.
      */
-    readonly id: string;
+    readonly id: string | null;
     readonly path: string;
     readonly name: string;
     readonly type: string;
