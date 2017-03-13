@@ -9,7 +9,7 @@
     "target": "ES5",
     "outDir": "../lib",
     "lib": ["dom", "es5", "es2015.collection", "es2015.promise"],
-    "types": ["text-encoding"]
+    "types": ["text-encoding", "whatwg-fetch"]
   },
   "exclude": ["typedoc.d.ts"]
 }

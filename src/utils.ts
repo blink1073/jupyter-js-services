@@ -3,7 +3,7 @@
 'use strict';
 
 import {
-  JSONObject, JSONValue, PromiseDelegate
+  JSONObject
 } from '@phosphor/coreutils';
 
 import * as minimist
@@ -14,6 +14,10 @@ import * as url
 
 import * as urljoin
   from 'url-join';
+
+import {
+  ManagedSocket
+} from './socket';
 
 
 // Stub for requirejs.
@@ -266,108 +270,69 @@ function getConfigOption(name: string): string {
 
 
 /**
- * The namespace for Server interaction.
+ * A class that represents a server connection.
+ */
+export
+class Server {
+  /**
+   * Create a new server instance.
+   */
+  constructor(options: Server.IOptions) {
+    let populated = Private.populateOptions(options);
+    this.baseUrl = populated.baseUrl;
+    this.wsUrl = populated.wsUrl;
+    this.token = populated.token;
+    this.requestDefaults = populated.requestDefaults;
+    this._socketFactory = populated.socketFactory;
+  }
+
+  /**
+   * The root url of the server.
+   */
+  readonly baseUrl: string;
+
+  /**
+   * The url to access websockets.
+   */
+  readonly wsUrl: string;
+
+  /**
+   * The token used for API requests.
+   */
+  readonly token: string;
+
+  /**
+   *  Default request settings.
+   */
+  readonly requestDefaults: RequestInit;
+
+  /**
+   * Fetch a resource from the server.
+   */
+  fetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+    return fetch(input, Private.getInit(this.requestDefaults, init));
+  }
+
+  /**
+   * Create a managed socket connection to the server.
+   */
+  createSocket(url: string): ManagedSocket {
+    // Add token if needed.
+    if (this.token) {
+      url = url + `&token=${encodeURIComponent(this.token)}`;
+    }
+    return new ManagedSocket({ url, factory: this._socketFactory });
+  }
+
+  private _socketFactory: (url: string) => WebSocket;
+}
+
+
+/**
+ * The namespace for Server class statics.
  */
 export
 namespace Server {
-  /**
-   * Asynchronous XMLHttpRequest handler.
-   *
-   * @param request - The ajax request data.
-   *
-   * @param options - The server options for the request.
-   *
-   * @returns a Promise that resolves with the success data.
-   */
-  export
-  function ajaxRequest(request: Partial<IAjaxRequest>, options: Partial<IOptions> = {}): Promise<IAjaxSuccess> {
-    return Private.makeRequest(
-      Private.handleRequestData(request), createOptions(options)
-    );
-  }
-
-  /**
-   * Create an AJAX error from an AJAX success.
-   *
-   * @param success - The original success object.
-   *
-   * @param message - The optional new error message.  If not given
-   *  we use "Invalid Status: <xhr.status>"
-   */
-  export
-  function makeAjaxError(success: IAjaxSuccess, message?: string): IAjaxError {
-    let { xhr, request, options, event } = success;
-    message = message || `Invalid Status: ${xhr.status}`;
-    return { xhr, request, options, event, message };
-  }
-
-  /**
-   * Create the server options given an options object.
-   */
-  export
-  function createOptions(options: Partial<IOptions>): IOptions {
-    let baseUrl = options.baseUrl || Private.getBaseUrl();
-    return {
-      baseUrl,
-      wsUrl: options.wsUrl || Private.getWsUrl(baseUrl),
-      token: options.token || getConfigOption('token'),
-      withCredentials: !!options.withCredentials,
-      user: options.user || '',
-      password: options.password || '',
-      requestHeaders: options.requestHeaders || {},
-      requestFactory: options.requestFactory || Private.defaultRequestFactory,
-      socketFactory: options.socketFactory || Private.defaultSocketFactory
-    };
-  }
-
-  /**
-   * An AJAX request.
-   */
-  export
-  interface IAjaxRequest {
-    /**
-     * The url of the request.
-     */
-    readonly url: string;
-
-    /**
-     * The HTTP method to use.  Defaults to `'GET'`.
-     */
-    readonly method: string;
-
-    /**
-     * The return data type (used to parse the return data).
-     */
-    readonly dataType: string;
-
-    /**
-     * The outgoing content type, used to set the `Content-Type` header.
-     */
-    readonly contentType: string;
-
-    /**
-     * The request data.
-     */
-    readonly data: JSONValue;
-
-    /**
-     * Whether to cache the response. Defaults to `true`.
-     */
-    readonly cache: boolean;
-
-    /**
-     * The number of milliseconds a request can take before automatically
-     * being terminated.  A value of 0 (which is the default) means there is
-     * no timeout.
-     */
-    readonly timeout: number;
-
-    /**
-     * A mapping of request headers, used via `setRequestHeader`.
-     */
-    readonly requestHeaders: { readonly [key: string]: string; };
-  }
-
   /**
    * A server options object.
    */
@@ -376,111 +341,27 @@ namespace Server {
     /**
      * The root url of the server.
      */
-    readonly baseUrl: string;
+    baseUrl?: string;
 
     /**
      * The url to access websockets.
      */
-    readonly wsUrl: string;
+    wsUrl?: string;
 
     /**
      * The token used for API requests.
      */
-    readonly token: string;
+    token?: string;
 
     /**
-     * Whether or not cross-site Access-Control
-     * requests should be made using credentials such as cookies or
-     * authorization headers.  Defaults to `false`.
+     * Request default settings.
      */
-    readonly withCredentials: boolean;
+    requestDefaults?: RequestInit;
 
     /**
-     * The user name for the server with the request.  Defaults to `''`.
+     * The web socket factory.
      */
-    readonly user: string;
-
-    /**
-     * The password for the server.  Defaults to `''`.
-     */
-    readonly password: string;
-
-    /**
-     * Mapping of request headers for every request, used via `setRequestHeader`.
-     */
-    readonly requestHeaders: { readonly [key: string]: string; };
-
-    /**
-     * The XMLHttpRequest factory.
-     */
-    requestFactory: () => XMLHttpRequest;
-
-    /**
-     * The Websocket factory.
-     */
-    socketFactory: (url: string) => WebSocket;
-  }
-
-  /**
-   * Data for a successful  AJAX request.
-   */
-  export
-  interface IAjaxSuccess {
-    /**
-     * The `onload` event.
-     */
-    readonly event: ProgressEvent;
-
-    /**
-     * The XHR object.
-     */
-    readonly xhr: XMLHttpRequest;
-
-    /**
-     * The request data.
-     */
-    readonly request: IAjaxRequest;
-
-    /**
-     * The server options.
-     */
-    readonly options: IOptions;
-
-    /**
-     * The data returned by the ajax call.
-     */
-    readonly data: JSONValue;
-  }
-
-  /**
-   * Data for an unsuccesful AJAX request.
-   */
-  export
-  interface IAjaxError {
-    /**
-     * The event triggering the error.
-     */
-    readonly event: Event;
-
-    /**
-     * The XHR object.
-     */
-    readonly xhr: XMLHttpRequest;
-
-    /**
-     * The request data.
-     */
-    readonly request: IAjaxRequest;
-
-    /**
-     * The server options.
-     */
-    readonly options: IOptions;
-
-    /**
-     * The error message associated with the error.
-     */
-    readonly message: string;
+    socketFactory?: (url: string) => WebSocket;
   }
 }
 
@@ -490,105 +371,55 @@ namespace Server {
  */
 namespace Private {
   /**
-   * Handle the ajax data, returning a new value.
+   * Populate the server options.
    */
   export
-  function handleRequestData(request: Partial<Server.IAjaxRequest>): Server.IAjaxRequest {
-    let url = request.url || '';
-    if (request.cache !== false) {
-      // https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/Using_XMLHttpRequest#Bypassing_the_cache.
-      url += ((/\?/).test(url) ? '&' : '?') + (new Date()).getTime();
+  function populateOptions(options: Server.IOptions = {}): Server.IOptions {
+    let baseUrl = options.baseUrl || getBaseUrl();
+    let token = options.token || getConfigOption('token');
+    let requestDefaults = options.requestDefaults || {};
+    let headers = requestDefaults.headers || [];
+    if (!(headers instanceof Headers)) {
+      headers = new Headers(headers);
     }
-    return {
-      url,
-      method: request.method || 'GET',
-      data: request.data || '{}',
-      dataType: request.dataType || 'application/json',
-      cache: request.cache !== false,
-      contentType: request.contentType || 'application/json',
-      requestHeaders: request.requestHeaders || {},
-      timeout: request.timeout || 0
-    };
-  }
-
-  /**
-   * Make a request.
-   */
-  export
-  function makeRequest(request: Server.IAjaxRequest, options: Server.IOptions): Promise<Server.IAjaxSuccess> {
-    let xhr = createXHR(request, options);
-    let delegate = new PromiseDelegate();
-
-    xhr.onload = (event: ProgressEvent) => {
-      if (xhr.status >= 300) {
-        let message = `Invalid Status: ${xhr.status}`;
-        delegate.reject({ event, xhr, request, options, message });
-      }
-      let data = xhr.responseText;
-      try {
-        data = JSON.parse(data);
-      } catch (err) {
-        // no-op
-      }
-      delegate.resolve({ xhr, request, options, data, event });
-    };
-
-    xhr.onabort = (event: Event) => {
-      delegate.reject({ xhr, event, request, options, message: 'Aborted' });
-    };
-
-    xhr.onerror = (event: ErrorEvent) => {
-      delegate.reject({
-        xhr, event, request, options, message: event.message
-      });
-    };
-
-    xhr.ontimeout = (ev: ProgressEvent) => {
-      delegate.reject({ xhr, event, request, options, message: 'Timed Out' });
-    };
-
-    xhr.send(request.data);
-    return delegate.promise;
-  }
-
-  /**
-   * Create the xhr object given a request and options.
-   */
-  function createXHR(request: Server.IAjaxRequest, options: Server.IOptions): XMLHttpRequest {
-    let xhr = options.requestFactory();
-    xhr.open(
-      request.method, request.url, true, options.user,
-      options.password
-    );
-
-    xhr.setRequestHeader('Content-Type', request.contentType);
-    xhr.timeout = request.timeout;
-    if (options.withCredentials) {
-      xhr.withCredentials = true;
-    }
-
-    // Write the request headers.
-    let headers = request.requestHeaders;
-    for (let prop in headers) {
-      xhr.setRequestHeader(prop, headers[prop]);
-    }
-    // Write the server request headers
-    headers = options.requestHeaders;
-    for (let prop in headers) {
-      xhr.setRequestHeader(prop, headers[prop]);
-    }
-
-    // Handle authorization.
-    if (options.token) {
-      xhr.setRequestHeader('Authorization', `token ${options.token}`);
+    if (token) {
+      headers.set('Authorization', `token ${options.token}`);
     } else if (typeof document !== 'undefined' && document.cookie) {
       let xsrfToken = getCookie('_xsrf');
       if (xsrfToken !== void 0) {
-        xhr.setRequestHeader('X-XSRFToken', xsrfToken);
+        headers.set('X-XSRFToken', xsrfToken);
       }
     }
+    requestDefaults.headers = headers;
+    return {
+      baseUrl,
+      wsUrl: options.wsUrl || getWsUrl(baseUrl),
+      token,
+      requestDefaults,
+      socketFactory: options.socketFactory || defaultSocketFactory
+    };
+  }
 
-    return xhr;
+  /**
+   * Get the init options for a given request.
+   */
+  export
+  function getInit(defaults: RequestInit, init: RequestInit = {}): RequestInit {
+    let defaultHeaders = defaults.headers as Headers;
+    let out: RequestInit = {...defaults, ...init};
+    // Set the headers that were in default but not in init.
+    if (!(out.headers instanceof Headers)) {
+      out.headers = new Headers(out.headers);
+    }
+    for (let key in defaultHeaders) {
+      if (out.headers.has(key)) {
+        continue;
+      }
+      out.headers.set(key, defaultHeaders.get(key));
+    }
+    // Make sure there is body data.
+    out.body = out.body || new Blob();
+    return out;
   }
 
   /**
@@ -633,12 +464,6 @@ namespace Private {
     let r = document.cookie.match('\\b' + name + '=([^;]*)\\b');
     return r ? r[1] : void 0;
   }
-
-  /**
-   * The default request factory.
-   */
-  export
-  const defaultRequestFactory = () => { return new XMLHttpRequest(); };
 
   /**
    * The default socket factory.
