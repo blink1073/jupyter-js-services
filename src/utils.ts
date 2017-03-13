@@ -307,10 +307,18 @@ class Server {
   readonly requestDefaults: RequestInit;
 
   /**
-   * Fetch a resource from the server.
+   * Make a request to the server.
    */
-  fetch(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
-    return fetch(input, Private.getInit(this.requestDefaults, init));
+  request(input: RequestInfo, init: RequestInit = {}): Promise<Response> {
+    let request = new Request(
+      input, Private.getInit(this.requestDefaults, init)
+    );
+    return fetch(request).then(response => {
+      if (!response.ok) {
+        throw { response, request, thrownError: response.statusText };
+      }
+      return response;
+    });
   }
 
   /**
